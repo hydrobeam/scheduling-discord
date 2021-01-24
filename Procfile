@@ -1,1 +1,1 @@
-worker: python bot exploration.py
+worker: python bot-exploration.py
