@@ -66,4 +66,4 @@ async def sum_numbers(ctx, num_1, num_2):
     await ctx.send(content=f"sum of numbers between {op1} and {op2}: {sloppy}")
 
 
-client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.cpNJWwAbavt8psSJaitRgwte4is")
+client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
