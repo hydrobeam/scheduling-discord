@@ -2,11 +2,6 @@ import discord
 from discord_slash import SlashCommand
 import random
 from discord_slash.utils import manage_commands  # Allows us to manage the command settings.
-import coloredlogs, logging
-
-coloredlogs.DEFAULT_LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
-
-coloredlogs.install()
 
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
@@ -71,9 +66,8 @@ async def sum_numbers(ctx, num_1, num_2):
     else:
         op1 = num_1
         op2 = num_2
-    logging.info(((op2 - op1 + 1)*(op1 + op2)) / 2)
+
     sloppy = round((op2 - op1 + 1)*(op1 + op2) / 2)
-    logging.info(f"minvalue: {op1}, maxvalue: {op2}")
     await ctx.send(content=f"sum of numbers between {op1} and {op2}: {sloppy}")
 
 
