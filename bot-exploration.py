@@ -9,11 +9,6 @@ slash = SlashCommand(client, auto_register=True, auto_delete=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]  # Put your server ID in this array.
 
 
-@client.event
-async def on_ready():
-    print("Ready!")
-
-
 @slash.slash(name="ping", guild_ids=guild_ids)
 async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
     await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
