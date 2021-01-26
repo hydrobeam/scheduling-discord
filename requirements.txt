@@ -1,5 +1,5 @@
 discord
 discord-py-slash-command
-apshceduler
+apscheduler
 ezgmail
 pymongo
