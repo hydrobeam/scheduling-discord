@@ -132,7 +132,7 @@ async def define_self(ctx, contact_info, message_matrix=None):
                                        "message matrix": message_matrix}},
                                    upsert=True)
 
-    await ctx.send(content=f"Contact information registered: {contact_info} | {message_matrix}")
+    await ctx.send(content=f"Contact information registered: {contact_info} || Message Matrix:\n{message_matrix}", complete_hidden=True)
 
 
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
