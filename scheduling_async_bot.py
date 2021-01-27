@@ -27,7 +27,6 @@ mainsched.start()
 async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
     await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
 
-"""
 
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
@@ -139,5 +138,4 @@ async def define_self(ctx, contact_info, message_matrix=None):
 
     await ctx.send(content=f"Contact information registered: {contact_info} || Message matrix: \n{message_matrix}", complete_hidden=True)
 
-"""
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
