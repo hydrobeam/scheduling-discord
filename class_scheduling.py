@@ -2,7 +2,7 @@ import datetime
 import random
 import ezgmail
 
-
+ezgmail.init(credentialsFile="My First Project-b95729fb5605.json")
 class ScheduledPerson:
 
     def __init__(self, msgmatrix, contact):

@@ -6,7 +6,12 @@ from pymongo import MongoClient
 import class_scheduling
 import datetime
 
-
+# TODO: Add cron job
+# TODO: display scheduled messages
+# TODO: remove scheduled
+# TODO: prioritize email in presenation
+# TODO: Integrate twiliio send grid in class_scheduling -- wait maybe not lmao
+# TODO: figure out how to make gmail work aaaaaaaaaaa
 
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
@@ -16,7 +21,6 @@ mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.
 db = mongoclient.discord
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
-
 
 mainsched = AsyncIOScheduler()
 mainsched.start()
@@ -130,15 +134,18 @@ async def define_self(ctx, contact_info, message_matrix=None):
         message_matrix = message_matrix.split(',')
 
     db.user_data.find_one_and_update({"user id": user_id},
-                                   {"$set": {
-                                       "contact information": contact_info,
-                                       "message matrix": message_matrix}},
-                                   upsert=True)
+                                     {"$set": {
+                                         "contact information": contact_info,
+                                         "message matrix": message_matrix}},
+                                     upsert=True)
 
-    await ctx.send(content=f"Contact information registered: {contact_info} || Message matrix: \n{message_matrix}", complete_hidden=True)
+    await ctx.send(content=f"Contact information registered: {contact_info} || Message matrix: \n{message_matrix}",
+                   complete_hidden=True)
 
-client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
 
 @slash.slash(name="get-schedule", description="acquire your listed jobs", guild_ids=guild_ids)
 async def get_schedule(ctx):
     pass
+
+
+client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
