@@ -3,5 +3,3 @@ discord-py-slash-command
 apscheduler
 ezgmail
 pymongo
-logging
-coloredlogs
