@@ -7,8 +7,6 @@ import class_scheduling
 import datetime
 import ezgmail
 
-coloredlogs.DEFAULT_LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
-coloredlogs.install()
 
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
@@ -22,11 +20,6 @@ guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 mainsched = AsyncIOScheduler()
 mainsched.start()
-
-
-def send(msg, number):
-    ezgmail.send(number, subject='', body=msg)
-
 
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
