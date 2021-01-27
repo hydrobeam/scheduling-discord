@@ -1,12 +1,15 @@
 import discord
 from discord_slash import SlashCommand
-from discord_slash.utils import manage_commands  
-
+from discord_slash.utils import manage_commands
+import coloredlogs, logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pymongo import MongoClient
 import class_scheduling
 import datetime
+import ezgmail
 
+coloredlogs.DEFAULT_LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
+coloredlogs.install()
 
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
@@ -20,11 +23,13 @@ guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 mainsched = AsyncIOScheduler()
 mainsched.start()
-@slash.slash(name="ping", guild_ids=guild_ids)
-async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
-    await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
-  
- 
+
+
+def send(msg, number):
+    ezgmail.send(number, subject='', body=msg)
+    logging.info(f"Message sent. Message: {msg}, number: {number}")
+
+
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
              guild_ids=guild_ids,
@@ -86,7 +91,8 @@ async def set_schedule(ctx, duration, increment, message=None):
     for time, msg in individual.time_dict.items():
         logging.info(f" Message: {msg}, {time}")
 
-        #mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg), misfire_grace_time=500)
+        mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg),
+                          misfire_grace_time=500)
 
     if message:
         await ctx.send(content=f"Message created: {message}")
@@ -127,7 +133,8 @@ async def set_schedule(ctx, duration, increment, message=None):
 async def define_self(ctx, contact_info, message_matrix=None):
     user_id = f"{ctx.author}"
 
-    message_matrix = message_matrix.split(',')
+    if message_matrix:
+        message_matrix = message_matrix.split(',')
 
     db.user_data.find_one_and_update({"user id": user_id},
                                    {"$set": {
@@ -135,7 +142,7 @@ async def define_self(ctx, contact_info, message_matrix=None):
                                        "message matrix": message_matrix}},
                                    upsert=True)
 
-    await ctx.send(content=f"Contact information registered: {contact_info} || Message Matrix:\n{message_matrix}", complete_hidden=True)
+    await ctx.send(content=f"Contact information registered: {contact_info} || Message matrix: \n{message_matrix}", complete_hidden=True)
 
 
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
