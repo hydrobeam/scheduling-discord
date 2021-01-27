@@ -20,7 +20,7 @@ guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 mainsched = AsyncIOScheduler()
 mainsched.start()
-
+"""
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
              guild_ids=guild_ids,
@@ -98,7 +98,7 @@ async def set_schedule(ctx, duration, increment, message=None):
 
     db.bot_usage.insert_one(info)
 
-
+"""
 @slash.slash(name="define-self",
              description="Initialize your details",
              guild_ids=guild_ids,
