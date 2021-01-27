@@ -1,7 +1,6 @@
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils import manage_commands
-import coloredlogs, logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pymongo import MongoClient
 import class_scheduling
@@ -27,7 +26,6 @@ mainsched.start()
 
 def send(msg, number):
     ezgmail.send(number, subject='', body=msg)
-    logging.info(f"Message sent. Message: {msg}, number: {number}")
 
 
 @slash.slash(name="set-interval-message",
@@ -79,18 +77,14 @@ async def set_schedule(ctx, duration, increment, message=None):
     if message:
         message_check = True
         message = message.split(',')
-        logging.info(message)
         individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
     else:
         message_check = None
-        logging.info(doc["message matrix"])
         individual = class_scheduling.ScheduledPerson(doc["message matrix"], doc["contact information"])
 
     individual.operate_scheduler(duration, increment)
 
     for time, msg in individual.time_dict.items():
-        logging.info(f" Message: {msg}, {time}")
-
         mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg),
                           misfire_grace_time=500)
 
