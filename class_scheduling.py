@@ -2,8 +2,6 @@ import datetime
 import random
 import ezgmail
 
-ezgmail.init()
-
 class ScheduledPerson:
 
     def __init__(self, msgmatrix, contact):
