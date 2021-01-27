@@ -18,10 +18,10 @@ db = mongoclient.discord
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
+"""
 mainsched = AsyncIOScheduler()
 mainsched.start()
 
-"""
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
              guild_ids=guild_ids,
