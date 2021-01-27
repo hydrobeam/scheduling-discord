@@ -5,7 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pymongo import MongoClient
 import class_scheduling
 import datetime
-import ezgmail
+
 
 
 client = discord.Client()
@@ -14,7 +14,6 @@ slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
                           "?retryWrites=true&w=majority")
 db = mongoclient.discord
-
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
@@ -139,3 +138,6 @@ async def define_self(ctx, contact_info, message_matrix=None):
     await ctx.send(content=f"Contact information registered: {contact_info} || Message matrix: \n{message_matrix}", complete_hidden=True)
 
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
+
+@slash.slash(name="get-schedule", description="acquire your listed jobs", guild_ids=guild_ids)
+async def get_schedule(ctx):

@@ -2,6 +2,7 @@ import datetime
 import random
 import ezgmail
 
+
 class ScheduledPerson:
 
     def __init__(self, msgmatrix, contact):
@@ -28,7 +29,7 @@ class ScheduledPerson:
         :param min: minimum value for the increment
         :param max: maximum value for the increment
         """
-        
+
         lm = self.fm + datetime.timedelta(minutes=duration)
         new_time = self.fm
         time_list = []
@@ -48,7 +49,7 @@ class ScheduledPerson:
             new_time += datetime.timedelta(minutes=increment)
 
         self.time_list = time_list
-        
+
     def time_assembler(self):
         time_dict = {}
         identifier = 0
@@ -59,7 +60,6 @@ class ScheduledPerson:
                 identifier = 0
                 time_dict[time] = self.msgmatrix[identifier]
             identifier += 1
-
 
         self.time_dict = time_dict
 
@@ -84,7 +84,7 @@ class ScheduledPerson:
     def operate_scheduler(self, duration, increment):
         self.interval_calc(duration, increment)
         self.time_assembler()
-        #self.message_scheduler()
+        # self.message_scheduler()
 
     def random_operate_scheduler(self, duration, min, max):
         self.random_interval_calc(duration, min, max)
