@@ -141,3 +141,4 @@ client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
 
 @slash.slash(name="get-schedule", description="acquire your listed jobs", guild_ids=guild_ids)
 async def get_schedule(ctx):
+    pass
