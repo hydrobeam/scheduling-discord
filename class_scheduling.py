@@ -37,8 +37,6 @@ class ScheduledPerson:
             increment = random.randint(min, max)
             new_time += datetime.timedelta(minutes=increment)
 
-        logging.info(f"length: {len(time_list)} first time: {time_list[0]} last time: {time_list[-1]}")
-
         self.time_list = time_list
 
     def interval_calc(self, duration, increment):
@@ -50,12 +48,10 @@ class ScheduledPerson:
             new_time += datetime.timedelta(minutes=increment)
 
         self.time_list = time_list
-        logging.info(f"length: {len(time_list)} first time: {time_list[0]} last time: {time_list[-1]}")
-
+        
     def time_assembler(self):
         time_dict = {}
         identifier = 0
-        logging.warning(self.time_list)
         for time in self.time_list:
             try:
                 time_dict[time] = self.msgmatrix[identifier]
@@ -66,7 +62,6 @@ class ScheduledPerson:
 
 
         self.time_dict = time_dict
-        logging.info(f"time_dict formed of length: {len(time_dict)}")
 
     def random_time_assembler(self):
         time_dict = {}
@@ -78,16 +73,13 @@ class ScheduledPerson:
             time_dict[time] = self.msgmatrix[identifier]
 
         self.time_dict = time_dict
-        logging.info(f"time_dict formed of length: {len(time_dict)}")
 
     def send_message(self, msg):
         ezgmail.send(self.contact, subject='', body=msg)
-        logging.info(f"Message sent. Message: {msg}, number: {self.contact}")
 
     def message_scheduler(self):
         for time, msg in self.time_dict.items():
             mainsched.add_job(self.send_message, 'date', run_date=time, args=msg, misfire_grace_time=500)
-            logging.info(f" Message: {msg}")
 
     def operate_scheduler(self, duration, increment):
         self.interval_calc(duration, increment)
