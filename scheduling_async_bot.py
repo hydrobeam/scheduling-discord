@@ -82,8 +82,7 @@ async def set_schedule(ctx, duration, increment, message=None):
     for time, msg in individual.time_dict.items():
         logging.info(f" Message: {msg}, {time}")
 
-        mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg),
-                          misfire_grace_time=500)
+        #mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg), misfire_grace_time=500)
 
     if message:
         await ctx.send(content=f"Message created: {message}")
