@@ -2,6 +2,7 @@ import discord
 from discord_slash import SlashCommand
 from discord_slash.utils import manage_commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.mongodb import MongoDBJobStore
 from pymongo import MongoClient
 import class_scheduling
 import datetime
@@ -11,7 +12,7 @@ import datetime
 # TODO: remove scheduled
 # TODO: prioritize email in presenation
 # TODO: Integrate twiliio send grid in class_scheduling -- wait maybe not lmao
-# TODO: figure out how to make gmail work aaaaaaaaaaa
+# TODO: figure out how to make gmail work aaaaaaaaaaa Ig it's done 😳
 
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
@@ -22,8 +23,14 @@ db = mongoclient.discord
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
-mainsched = AsyncIOScheduler()
-mainsched.start()
+def init_scheduler():
+    jobstores = {
+        'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
+    }
+    mainsched = AsyncIOScheduler(jobstores=jobstores)
+    mainsched.start()
+
+init_scheduler()
 
 
 @slash.slash(name="ping", guild_ids=guild_ids)
@@ -56,10 +63,7 @@ async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
              ]
              )
 async def set_schedule(ctx, duration, increment, message=None):
-    user_id = f"{ctx.author}"
-
     # Establish the bounds
-
     if increment < 2:
         increment = 2
     if duration > 360:
@@ -68,15 +72,14 @@ async def set_schedule(ctx, duration, increment, message=None):
         await ctx.send(content="Please enter a valid duration.")
         return
 
-    doc = db.user_data.find_one({"user id": user_id})
-
     # Does their record exist?
-
-    if doc == None:
+    user_id = ctx.author
+    doc = db.user_data.find_one({"user id": user_id})
+    # Does their record exist?
+    if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    # Message matrix or defined message
     if message:
         message_check = True
         message = message.split(',')
@@ -128,7 +131,7 @@ async def set_schedule(ctx, duration, increment, message=None):
              ]
              )
 async def define_self(ctx, contact_info, message_matrix=None):
-    user_id = f"{ctx.author}"
+    user_id = ctx.author
 
     if message_matrix:
         message_matrix = message_matrix.split(',')
@@ -143,8 +146,61 @@ async def define_self(ctx, contact_info, message_matrix=None):
                    complete_hidden=True)
 
 
-@slash.slash(name="get-schedule", description="acquire your listed jobs", guild_ids=guild_ids)
+@slash.slash(name="daily-reminder", description="Set a daily reminder", guild_ids=guild_ids,
+             options=[
+                 manage_commands.create_option(
+                     name="hour",
+                     description="specify hour, 24h clock",
+                     option_type=4,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="minute",
+                     description="specify minute",
+                     option_type=4,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="message",
+                     description="specify message, uses message matrix value if empty",
+                     option_type=3,
+                     required=False
+                 )
+             ])
+async def daily_reminder(ctx, hour, minute, message):
+    user_id = ctx.author
+    doc = db.user_data.find_one({"user id": user_id})
+    # Does their record exist?
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+
+    ctx.send(content="Command under maintenance")
+    pass
+
+
+@slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids)
 async def get_schedule(ctx):
+    user_id = ctx.author
+    doc = db.user_data.find_one({"user id": user_id})
+    # Does their record exist?
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+    ctx.send(content="Command under maintenance")
+    pass
+
+
+@slash.slash(name="delete-schedule", description="remove all listed jobs", guild_ids=guild_ids)
+async def remove_schedule(ctx):
+    user_id = ctx.author
+    doc = db.user_data.find_one({"user id": user_id})
+    # Does their record exist?
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+
+    ctx.send(content="Command under maintenance")
     pass
 
 
