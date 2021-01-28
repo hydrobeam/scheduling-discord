@@ -185,7 +185,7 @@ async def get_schedule(ctx):
     if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
-    ctx.send(content="Command under maintenance")
+    await ctx.send(content="Command under maintenance")
     pass
 
 
