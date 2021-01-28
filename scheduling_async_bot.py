@@ -23,14 +23,12 @@ db = mongoclient.discord
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
-def init_scheduler():
-    jobstores = {
-        'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
-    }
-    mainsched = AsyncIOScheduler(jobstores=jobstores)
-    mainsched.start()
+jobstores = {
+    'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
+}
+mainsched = AsyncIOScheduler(jobstores=jobstores)
+mainsched.start()
 
-init_scheduler()
 
 
 @slash.slash(name="ping", guild_ids=guild_ids)
