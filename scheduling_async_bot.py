@@ -29,12 +29,21 @@ jobstores = {
 mainsched = AsyncIOScheduler(jobstores=jobstores)
 mainsched.start()
 
-
+# fun commands
 
 @slash.slash(name="ping", guild_ids=guild_ids)
 async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
     await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
 
+@slash.slash(name="hello", description="say hello!", guild_ids=guild_ids)
+async def hello(ctx):
+    await ctx.send(content="Hello :)")
+
+@slash.slash(name="bye", description="say bye bye :(", guild_ids=guild_ids)
+async def bye(ctx):
+    await ctx.send(content="Bye bye :o")
+
+# serious commands
 
 @slash.slash(name="set-interval-message",
              description="Set a schedule with specific duration and message",
@@ -173,7 +182,7 @@ async def daily_reminder(ctx, hour, minute, message):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    ctx.send(content="Command under maintenance")
+    await ctx.send(content="Command under maintenance")
     pass
 
 
