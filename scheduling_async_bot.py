@@ -37,11 +37,11 @@ async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
 
 @slash.slash(name="hello", description="say hello!", guild_ids=guild_ids)
 async def hello(ctx):
-    await ctx.send(content="Hello :)")
+    await ctx.send(content="hello :)")
 
 @slash.slash(name="bye", description="say bye bye :(", guild_ids=guild_ids)
 async def bye(ctx):
-    await ctx.send(content="Bye bye :o")
+    await ctx.send(content="bye bye :o")
 
 # serious commands
 
