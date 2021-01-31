@@ -7,9 +7,8 @@ from pymongo import MongoClient, DESCENDING
 import class_scheduling
 import datetime
 
-
 # TODO: Add cron job
-# TODO: display scheduled messages
+# TODO: display scheduled messages -- done, maybe add better display for all_jobs?
 # TODO: remove scheduled
 # TODO: prioritize email in presenation
 # TODO: Integrate twiliio send grid in class_scheduling -- wait maybe not lmao
@@ -27,11 +26,10 @@ sched = mongoclient.apshceduler
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 jobstores = {
-    'default':MongoDBJobStore(client=mongoclient, collection="scheduled-job")
+    'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
 }
 mainsched = AsyncIOScheduler(jobstores=jobstores)
 mainsched.start()
-
 
 
 # serious commands
@@ -158,11 +156,86 @@ async def daily_reminder(ctx, hour, minute, message):
         return
 
     individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'cron', args=(individual, message), hour=hour,
-                      minute=minute, misfire_grace_time=500, replace_existing=True, id=user_id)
 
-    await ctx.send(content="Command under maintenance")
-    pass
+    str_id = str(user_id) + 'cron'
+    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'cron', args=(individual, message), hour=hour,
+                      minute=minute, misfire_grace_time=500, replace_existing=True, id=str_id)
+
+    await ctx.send(content=f"Schedule created: at {hour}:{minute} send {message}")
+
+
+@slash.slash(name="between-two-times", description='send messages at an interval between two times throughout the day',
+             guild_ids=guild_ids,
+             options=[
+                 manage_commands.create_option(
+                     name="time_1",
+                     description="Initial time. Format in 24h: HH:MM | 09:04",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="time_2",
+                     description="Final time. Format in 24h: HH:MM | 23:30",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="interval",
+                     description="Time between messages in minutes, minimum: 20 minutes",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="message",
+                     description="Message to be sent",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="repeating",
+                     description="repeat daily?",
+                     option_type=5,
+                     choices=[
+                         manage_commands.create_choice(
+                             name="Yes",
+                             value=True
+                         ),
+                         manage_commands.create_choice(
+                             name="No",
+                             value=False
+                         )
+                     ]
+                 )
+             ])
+async def between_times(ctx, time_1, time_2, interval, message, repeating):
+    user_id = ctx.author
+    doc = db.user_data.find_one({"user id": user_id})
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+
+    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
+    str_id = str(user_id) + 'cron'
+
+    # Format the times
+    tomorrow = datetime.datetime.now() + datetime.timedelta(day=1)
+    time_1 = datetime.datetime.strptime(time_1, '%H:%M')
+    time_2 = datetime.datetime.strptime(time_2, '%H:%M')
+
+    def between_times_interval():
+        mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=interval,
+                          start_date=time_1,
+                          end_date=time_2,
+                          args=(individual, message), misfire_grace_time=500, replace_existing=True, id=str_id)
+
+    if repeating:
+        between_times_interval()
+        mainsched.add_job(between_times_interval, 'cron',start_time=tomorrow ,hour=time_1.hour, minute=time_1.minute,
+                          misfire_grace_time=500, replace_existing=True, id=str_id)
+    else:
+        between_times_interval()
+
+    await ctx.send(f"Schedule created: {message} from {time_1} to {time_2}. Repeating: {repeating}")
 
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids,
@@ -222,7 +295,7 @@ async def get_schedule(ctx, schedule_type):
         except TypeError:
             await ctx.send(content="No jobs found.")
             return
-        str_out = f" Job type: {schedule_type.title()} ~~ Next due message: {t.hour}:{t.strftime('%M')} {t.strftime('%p')}"
+        str_out = f" Job type: {schedule_type.title()} ~~ Next due message: {t.hour}:{t.strftime('%M')} {t.strftime('%p')} "
 
     await ctx.send(content=str_out)
     pass
@@ -242,11 +315,11 @@ async def get_schedule(ctx, schedule_type):
                          ),
                          manage_commands.create_choice(
                              name="daily",
-                             value="daily"
+                             value="cron"
                          ),
                          manage_commands.create_choice(
                              name="timed",
-                             value="timed"
+                             value="date"
                          ),
                          manage_commands.create_choice(
                              name="all",
@@ -270,6 +343,7 @@ async def remove_schedule(ctx, schedule_type):
     await ctx.send(content="Command executed, listed jobs removed")
     pass
 
+
 # fun commands
 
 @slash.slash(name="ping", guild_ids=guild_ids)
@@ -285,7 +359,6 @@ async def hello(ctx):
 @slash.slash(name="bye", description="say bye bye :(", guild_ids=guild_ids)
 async def bye(ctx):
     await ctx.send(content="bye bye :o")
-
 
 
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
