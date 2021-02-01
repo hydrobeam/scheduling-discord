@@ -182,7 +182,7 @@ async def daily_reminder(ctx, hour, minute, message):
                  manage_commands.create_option(
                      name="interval",
                      description="Time between messages in minutes, minimum: 20 minutes",
-                     option_type=3,
+                     option_type=4,
                      required=True
                  ),
                  manage_commands.create_option(
@@ -193,16 +193,17 @@ async def daily_reminder(ctx, hour, minute, message):
                  ),
                  manage_commands.create_option(
                      name="repeating",
-                     description="repeat daily?",
-                     option_type=5,
+                     description="Repeat daily?",
+                     option_type=3,
+                     required=True,
                      choices=[
                          manage_commands.create_choice(
                              name="Yes",
-                             value=True
+                             value="True"
                          ),
                          manage_commands.create_choice(
                              name="No",
-                             value=False
+                             value="False"
                          )
                      ]
                  )
@@ -218,25 +219,28 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
     str_id = str(user_id) + 'cron'
 
     # Format the times
-    tomorrow = datetime.datetime.now() + datetime.timedelta(day=1)
+    today = datetime.datetime.today()
+    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1, minutes=0, hours=0)
     time_1 = datetime.datetime.strptime(time_1, '%H:%M')
     time_2 = datetime.datetime.strptime(time_2, '%H:%M')
 
-    def between_times_interval():
-        mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=interval,
-                          start_date=time_1,
-                          end_date=time_2,
-                          args=(individual, message), misfire_grace_time=500, replace_existing=True, id=str_id)
+    between_times_interval(time_1,time_2,interval,individual,message,str_id)
 
-    if repeating:
-        between_times_interval()
-        mainsched.add_job(between_times_interval, 'cron',start_time=tomorrow ,hour=time_1.hour, minute=time_1.minute,
+    if repeating == 'True':
+        mainsched.add_job(between_times_interval, 'cron',start_date=tomorrow ,hour=time_1.hour, minute=time_1.minute,
+                          args=(time_1,time_2,interval,individual,message,str_id) ,
                           misfire_grace_time=500, replace_existing=True, id=str_id)
-    else:
-        between_times_interval()
 
-    await ctx.send(f"Schedule created: {message} from {time_1} to {time_2}. Repeating: {repeating}")
+    await ctx.send(content=f"Message: {message} \nTime: from {time_1.strftime('%H:%M')} to {time_2.strftime('%H:%M')} Repeating: {repeating}")
 
+def between_times_interval(time_1, time_2, interval, individual, message, str_id):
+    today = datetime.datetime.today()
+    time_1 = datetime.datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
+    time_2 = datetime.datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
+    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=interval,
+                      start_date=time_1,
+                      end_date=time_2,
+                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=str_id+"interval")
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids,
              options=[
@@ -277,6 +281,7 @@ async def get_schedule(ctx, schedule_type):
         query_result = ap.find({'_id': {'$regex': '.*' + str(user_id) + '.*'}})
 
         for item in query_result:
+            str_out= ""
             # find the type of job it is, separating it from the string
             item_type = ''.join(i for i in item['_id'] if not i.isdigit())
 
