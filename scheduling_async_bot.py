@@ -22,7 +22,7 @@ import logging
 
 # Initialization stuff
 
-#coloredlogs.install()
+# coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
@@ -108,8 +108,8 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
     propertime = datetime(year, month_of_year, day_of_month, time.hour, time.minute)
 
     # would use walrus, but heroku doesnt likey
-    x = datetime.now()
-    if x > propertime:
+
+    if (x := datetime.now()) > propertime:
         await ctx.send(
             content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
         return
