@@ -106,7 +106,8 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
 
     # define the time of delivery
     propertime = datetime(year, month_of_year, day_of_month, time.hour, time.minute)
-    if (x := datetime.now()) > propertime:
+    x = datetime.now()
+    if x > propertime:
         await ctx.send(
             content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
         return
