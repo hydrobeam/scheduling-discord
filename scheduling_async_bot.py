@@ -9,7 +9,7 @@ from pymongo import MongoClient
 import class_scheduling
 from datetime import timedelta, datetime
 from uuid import uuid4
-import logging
+import logging, coloredlogs
 
 # TODO: prioritize email in presenation
 # TODO: fix the formatting on Daily-reminder
@@ -22,7 +22,7 @@ import logging
 
 # Initialization stuff
 
-# coloredlogs.install()
+coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
@@ -99,7 +99,8 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
     individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
 
     # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
-    if "am" or "pm" in time_of_day.lower().replace(' ', ''):
+    time_of_day = time_of_day.lower().replace(' ', '')
+    if "am" in time_of_day or "pm" in time_of_day:
         time = datetime.strptime(time_of_day, '%I:%M%p')
     else:
         time = datetime.strptime(time_of_day, '%H:%M')
