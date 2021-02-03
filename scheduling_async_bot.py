@@ -11,6 +11,8 @@ from datetime import timedelta, datetime
 from uuid import uuid4
 import logging
 
+from pprint import pprint
+
 # TODO: prioritize email in presenation
 # TODO: fix the formatting on Daily-reminder
 # Todo: figure out if the class shit is even efficient at all probs not lmfao
@@ -18,11 +20,14 @@ import logging
 # TODO: inndex removals
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
+# TODO: bdtweentwo tiems tomorow
+# intervals dont work
+# cron wont work
 # lots of calls to datetime.now() :/
 
 # Initialization stuff
 
-#coloredlogs.install()
+# coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
@@ -40,12 +45,10 @@ mainsched.start()
 
 
 def jobitem_removed(event):
-    splice = event.job_id.split('user')
-    job_id = splice[0]
-    user_id = int(splice[1])
+    user_id = int(event.job_id.split('user')[1])
 
     db.bot_usage.find_one_and_update({'user id': user_id},
-                                     {'$pull': {'active jobs': job_id}})
+                                     {'$pull': {'active jobs': event.job_id}})
     logging.info(f"event: {event}, listener activated")
 
 
@@ -348,25 +351,52 @@ async def get_schedule(ctx):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
+    # find the users active jobs
     temp = db.bot_usage.find_one({'user id': user_id})
     str_out = "No jobs found"
     if temp['active jobs']:
         str_out = ""
         job_count = 1
         for value in temp['active jobs']:
+            # get the job and extract data from  it
             job = mainsched.get_job(value)
-
             # message is always the second arg
             jobtime = job.next_run_time
-            ymd = f"{jobtime.strftime('%b')} {jobtime.day} {jobtime.year}"
+            # details about the trigger
+            trig = job.trigger
+
+            # get jobtype
+            jobtrig = f" {str(trig).split('[')[0]}"
+
+            # welcome to the ghetto, getting vars from trigger
+            try:
+                if x := short_dt(trig.start_date):
+                    jobtrig += f" | **Start time**: {x} "
+                if x := short_dt(trig.end_date):
+                    jobtrig += f"**End time**: {x}"
+            except AttributeError:
+                pass
+
+            next_run_time = format_dt(jobtime)
             str_out += f"*Job: {job_count}* \n" \
-                       f"**Next run time**: {jobtime.strftime('%A')} {jobtime.hour % 12}:{jobtime.strftime('%M')} {jobtime.strftime('%p')} | {ymd}\n" \
+                       f"**Next run time**: {next_run_time} \n" \
                        f"**Message**: {job.args[1]} \n" \
-                       f"**Trigger**: {job.trigger} \n\n"
+                       f"__Trigger__: {jobtrig} \n\n"
 
             job_count += 1
 
     await ctx.send(content=str_out)
+
+
+def format_dt(dtobject):
+    ymd = f"{dtobject.strftime('%b')} {dtobject.day} {dtobject.year}"
+    formatted = f"{dtobject.strftime('%A')} {dtobject.hour % 12}:{dtobject.strftime('%M')} {dtobject.strftime('%p')} | {ymd}"
+    return formatted
+
+
+def short_dt(dtobject):
+    formatted = f"{dtobject.hour % 12}:{dtobject.strftime('%M')} {dtobject.strftime('%p')}"
+    return formatted
 
 
 @slash.slash(name="remove-schedule", description="remove all listed jobs", guild_ids=guild_ids)
