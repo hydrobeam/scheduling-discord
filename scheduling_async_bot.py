@@ -116,6 +116,10 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
 
     mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=propertime,
                       args=[individual, message], id=id_)
+
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$push': {'active jobs': id_}})
+
     await ctx.send(content=f"**{message}** Message sent, due for {propertime}.")
 
 
