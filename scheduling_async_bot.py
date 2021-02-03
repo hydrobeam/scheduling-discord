@@ -3,39 +3,120 @@ from discord_slash import SlashCommand
 from discord_slash.utils import manage_commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.mongodb import MongoDBJobStore
-from pymongo import MongoClient, DESCENDING
+from apscheduler.jobstores.base import JobLookupError
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
+from pymongo import MongoClient
 import class_scheduling
-import datetime
+from datetime import timedelta, datetime
+from uuid import uuid4
+import logging, coloredlogs
 
-# TODO: Add cron job
-# TODO: display scheduled messages -- done, maybe add better display for all_jobs?
-# TODO: remove scheduled
 # TODO: prioritize email in presenation
-# TODO: Integrate twiliio send grid in class_scheduling -- wait maybe not lmao
-# TODO: figure out how to make gmail work aaaaaaaaaaa Ig it's done 😳
+# TODO: fix the formatting on Daily-reminder
+# Todo: figure out if the class shit is even efficient at all probs not lmfao
+# TODO: make the config stuff a function
+# TODO: inndex removals
+# TODO: if name == 'main' ?
+# TODO: Interval message redundant? evaluate
+# lots of calls to datetime.now() :/
 
+# Initialization stuff
+
+coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
-
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
                           "?retryWrites=true&w=majority")
-ap = mongoclient['apscheduler']['scheduled-job']
+
 db = mongoclient.discord
-sched = mongoclient.apshceduler
 
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 jobstores = {
     'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
 }
-mainsched = AsyncIOScheduler(jobstores=jobstores)
+mainsched = AsyncIOScheduler(jobstores=jobstores, timezone="America/New_York")
 mainsched.start()
+
+
+def jobitem_removed(event):
+    splice = event.job_id.split('user')
+    job_id = splice[0]
+    user_id = int(splice[1])
+
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$pull': {'active jobs': job_id}})
+    logging.info(f"event: {event}, listener activated")
+
+
+mainsched.add_listener(jobitem_removed, EVENT_JOB_EXECUTED | EVENT_JOB_REMOVED)
 
 
 # serious commands
 
-@slash.slash(name="interval-message",
-             description="Set a schedule with specific duration and message",
+# lots of calls to datetime.now :/ maybe a decorator can fix that?
+@slash.slash(name="date-message", description="send a message at a specific date and time", guild_ids=guild_ids,
+             options=[
+                 manage_commands.create_option(
+                     name="message",
+                     description="message to deliver",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="time_of_day",
+                     description="time of day - HH:MM",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="day_of_month",
+                     description="day of the month between 1 and 31, defaults current day",
+                     option_type=4,
+                     required=False
+                 ),
+                 manage_commands.create_option(
+                     name="month_of_year",
+                     description="month of the year between 1 and 12, defaults to current month",
+                     option_type=4,
+                     required=False
+                 ),
+                 manage_commands.create_option(
+                     name="year",
+                     description="year format : 2021, defaults to current year",
+                     option_type=4,
+                     required=False
+                 )
+             ])
+async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month_of_year=datetime.now().month,
+               year=datetime.now().year):
+    user_id = ctx.author
+    id_ = uuid4().hex + "user" + str(user_id)
+    doc = db.user_data.find_one({"user id": user_id})
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
+
+    # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
+    if "am" or "pm" in time_of_day.lower().replace(' ', ''):
+        time = datetime.strptime(time_of_day, '%I:%M%p')
+    else:
+        time = datetime.strptime(time_of_day, '%H:%M')
+
+    # define the time of delivery
+    propertime = datetime(year, month_of_year, day_of_month, time.hour, time.minute)
+    if (x := datetime.now()) > propertime:
+        await ctx.send(
+            content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
+        return
+
+    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=propertime,
+                      args=[individual, message], id=id_)
+    await ctx.send(content=f"**{message}** Message sent, due for {propertime}.")
+
+
+@slash.slash(name="interval-message", description="repeat a message for a specified duration/interval",
              guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
@@ -70,58 +151,41 @@ async def interval(ctx, duration, increment, message):
 
     # Does their record exist?
     user_id = ctx.author
+    id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
     if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    """
-    message = message.split(',')
-    
-    individual.operate_scheduler(duration, increment)
-
-    for time, msg in individual.time_dict.items():
-        mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=time, args=(individual, msg),
-                          misfire_grace_time=500, replace_existing=True, id=user_id)"""
-    str_id = str(user_id) + "interval"
-
     individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
     mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=duration,
-                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=str_id)
+                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=id_)
+
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$push': {'active jobs': id_}})
+
     await ctx.send(content=f"Message created: {message}", complete_hidden=True)
 
 
-"""
-    # Log data to a database
-    info = {
-        "id": job.id,
-        "expireAt": str(individual.fm + datetime.timedelta(minutes=duration)),
-        "job type": "interval",
-    }
-
-    db.bot_usage.insert_one(info)
-    db.bot_usage.create_index('expireAt', {'expireAfterSeconds': 0}, background=True)
-"""
-
-
-@slash.slash(name="define-self",
-             description="Initialize your details",
-             guild_ids=guild_ids,
+@slash.slash(name="define-self", description="Initialize your details", guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
                      name="contact_info",
                      description="Your phone number's email address: {your carrier} SMS Gateway",
                      option_type=3,
                      required=True
-                 ),
-             ]
-             )
+                 ), ])
 async def define_self(ctx, contact_info):
     user_id = ctx.author
-
     db.user_data.find_one_and_update({"user id": user_id},
                                      {"$set": {"contact information": contact_info}},
                                      upsert=True)
+
+    db.bot_usage.find_one_and_update(
+        {'user id': user_id},
+        {"$setOnInsert": {'active jobs': []}},
+        upsert=True
+    )
 
     await ctx.send(content=f"Contact information registered: {contact_info}", complete_hidden=True)
 
@@ -150,16 +214,18 @@ async def define_self(ctx, contact_info):
 async def daily_reminder(ctx, hour, minute, message):
     # init data
     user_id = ctx.author
+    id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
     if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
+    # initialize the class
     individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-
-    str_id = str(user_id) + 'cron'
     mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'cron', args=(individual, message), hour=hour,
-                      minute=minute, misfire_grace_time=500, replace_existing=True, id=str_id)
+                      minute=minute, misfire_grace_time=500, replace_existing=True, id=id_)
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$push': {'active jobs': id_}})
 
     await ctx.send(content=f"Schedule created: at {hour}:{minute} send {message}")
 
@@ -169,13 +235,13 @@ async def daily_reminder(ctx, hour, minute, message):
              options=[
                  manage_commands.create_option(
                      name="time_1",
-                     description="Initial time. Format in 24h: HH:MM | 09:04",
+                     description="Initial time. Format in 24h | 9:04",
                      option_type=3,
                      required=True
                  ),
                  manage_commands.create_option(
                      name="time_2",
-                     description="Final time. Format in 24h: HH:MM | 23:30",
+                     description="Final time. Format in 24h | 23:30",
                      option_type=3,
                      required=True
                  ),
@@ -198,11 +264,11 @@ async def daily_reminder(ctx, hour, minute, message):
                      required=True,
                      choices=[
                          manage_commands.create_choice(
-                             name="Yes",
+                             name="True",
                              value="True"
                          ),
                          manage_commands.create_choice(
-                             name="No",
+                             name="False",
                              value="False"
                          )
                      ]
@@ -210,65 +276,63 @@ async def daily_reminder(ctx, hour, minute, message):
              ])
 async def between_times(ctx, time_1, time_2, interval, message, repeating):
     user_id = ctx.author
+    id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
     if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-    str_id = str(user_id) + 'cron'
 
     # Format the times
-    today = datetime.datetime.today()
-    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1, minutes=0, hours=0)
-    time_1 = datetime.datetime.strptime(time_1, '%H:%M')
-    time_2 = datetime.datetime.strptime(time_2, '%H:%M')
+    tomorrow = datetime.now() + timedelta(days=1, hours=0, minutes=0)
+    time_1 = datetime.strptime(time_1, '%H:%M')
+    time_2 = datetime.strptime(time_2, '%H:%M')
+    today = datetime.today()
+    time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
+    time_2 = datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
 
-    between_times_interval(time_1,time_2,interval,individual,message,str_id)
+    between_times_interval(individual, message, time_1, time_2, interval, user_id)
 
     if repeating == 'True':
-        mainsched.add_job(between_times_interval, 'cron',start_date=tomorrow ,hour=time_1.hour, minute=time_1.minute,
-                          args=(time_1,time_2,interval,individual,message,str_id) ,
-                          misfire_grace_time=500, replace_existing=True, id=str_id)
+        # make sure that the call for repeating starts the next day, not today, not two days from now
+        if today > time_1:
+            mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
+                              args=(individual, message, time_1, time_2, interval, user_id),
+                              misfire_grace_time=500, replace_existing=True, id=id_)
+        elif today < time_1:
+            mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
+                              minute=time_1.minute,
+                              args=(individual, message, time_1, time_2, interval, user_id),
+                              misfire_grace_time=500, replace_existing=True, id=id_)
 
-    await ctx.send(content=f"Message: {message} \nTime: from {time_1.strftime('%H:%M')} to {time_2.strftime('%H:%M')} Repeating: {repeating}")
+        db.bot_usage.find_one_and_update({'user id': user_id},
+                                         {'$push': {'active jobs': id_}})
 
-def between_times_interval(time_1, time_2, interval, individual, message, str_id):
-    today = datetime.datetime.today()
-    time_1 = datetime.datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
-    time_2 = datetime.datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
+    await ctx.send(
+        content=f"Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** Repeating: {repeating}")
+
+
+# error comes up when the function is placed in the above function, so it's here /shrug
+def between_times_interval(individual, message, time_1, time_2, interval, user_id):
+    id_ = uuid4().hex + "user" + str(user_id)
+    today = datetime.today()
+    time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
+    time_2 = datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
+    if time_1 > time_2:
+        time_2 += timedelta(days=1, hours=0, minutes=0)
+
     mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
-                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=str_id+"interval")
+                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=id_)
 
-@slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids,
-             options=[
-                 manage_commands.create_option(
-                     name="schedule_type",
-                     description="identify the type of job you would like see",
-                     required=True,
-                     option_type=3,
-                     choices=[
-                         manage_commands.create_choice(
-                             name="interval",
-                             value="interval"
-                         ),
-                         manage_commands.create_choice(
-                             name="daily",
-                             value="daily"
-                         ),
-                         manage_commands.create_choice(
-                             name="timed",
-                             value="timed"
-                         ),
-                         manage_commands.create_choice(
-                             name="all",
-                             value="all"
-                         )]
-                 )
-             ])
-async def get_schedule(ctx, schedule_type):
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$push': {'active jobs': id_}})
+
+
+@slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids)
+async def get_schedule(ctx):
     # the verification process
     user_id = ctx.author
     doc = db.user_data.find_one({"user id": user_id})
@@ -276,63 +340,30 @@ async def get_schedule(ctx, schedule_type):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    if schedule_type == "all":
-        str_out = "No jobs found."
-        query_result = ap.find({'_id': {'$regex': '.*' + str(user_id) + '.*'}})
+    temp = db.bot_usage.find_one({'user id': user_id})
+    str_out = "No jobs found"
+    if temp['active jobs']:
+        str_out = ""
+        job_count = 1
+        for value in temp['active jobs']:
+            job = mainsched.get_job(value)
 
-        for item in query_result:
-            str_out= ""
-            # find the type of job it is, separating it from the string
-            item_type = ''.join(i for i in item['_id'] if not i.isdigit())
+            # message is always the second arg
+            jobtime = job.next_run_time
+            ymd = f"{jobtime.strftime('%b')} {jobtime.day} {jobtime.year}"
+            str_out += f"*Job: {job_count}* \n" \
+                       f"**Next run time**: {jobtime.strftime('%A')} {jobtime.hour % 12}:{jobtime.strftime('%M')} {jobtime.strftime('%p')} | {ymd}\n" \
+                       f"**Message**: {job.args[1]} \n" \
+                       f"**Trigger**: {job.trigger} \n\n"
 
-            # format the time
-            t = datetime.datetime.fromtimestamp((item["next_run_time"]))
-            formatted_time = f" Job type: {item_type.title()} ~~ Next due message: {t.hour}:{t.strftime('%M')} {t.strftime('%p')}"
-            str_out += formatted_time
-    else:
-        # get the query
-
-        query_result = ap.find_one({'_id': str(user_id) + schedule_type})
-
-        # format the time
-        try:
-            t = datetime.datetime.fromtimestamp((query_result['next_run_time']))
-        except TypeError:
-            await ctx.send(content="No jobs found.")
-            return
-        str_out = f" Job type: {schedule_type.title()} ~~ Next due message: {t.hour}:{t.strftime('%M')} {t.strftime('%p')} "
+            job_count += 1
 
     await ctx.send(content=str_out)
-    pass
 
 
-@slash.slash(name="delete-schedule", description="remove all listed jobs", guild_ids=guild_ids,
-             options=[
-                 manage_commands.create_option(
-                     name="schedule_type",
-                     description="identify the type of job you would like deleted",
-                     required=True,
-                     option_type=3,
-                     choices=[
-                         manage_commands.create_choice(
-                             name="interval",
-                             value="interval"
-                         ),
-                         manage_commands.create_choice(
-                             name="daily",
-                             value="cron"
-                         ),
-                         manage_commands.create_choice(
-                             name="timed",
-                             value="date"
-                         ),
-                         manage_commands.create_choice(
-                             name="all",
-                             value="all"
-                         )]
-                 )
-             ])
-async def remove_schedule(ctx, schedule_type):
+@slash.slash(name="remove-schedule", description="remove all listed jobs", guild_ids=guild_ids)
+async def remove_schedule(ctx):
+    # TODO: allow for index deletion
     # verification process
     user_id = ctx.author
     doc = db.user_data.find_one({"user id": user_id})
@@ -340,13 +371,17 @@ async def remove_schedule(ctx, schedule_type):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    if schedule_type == "all":
-        ap.delete_many({'_id': {'$regex': '.*' + str(user_id) + '.*'}})
-    else:
-        ap.delete_one({'_id': str(user_id) + schedule_type})
+    temp = db.bot_usage.find_one({'user id': user_id})
+    for value in temp['active jobs']:
+        try:
+            mainsched.remove_job(value, 'default')
+            db.bot_usage.update_one({'user id': user_id},
+                                    {'$pull': {'active jobs': value}})
+        except JobLookupError:
+            db.bot_usage.update_one({'user id': user_id},
+                                    {'$pull': {'active jobs': value}})
 
     await ctx.send(content="Command executed, listed jobs removed")
-    pass
 
 
 # fun commands
