@@ -10,19 +10,18 @@ import class_scheduling
 from datetime import timedelta, datetime
 from uuid import uuid4
 import logging
+import ezgmail
 
 from pprint import pprint
 
 # TODO: prioritize email in presenation
-# TODO: fix the formatting on Daily-reminder
-# Todo: figure out if the class shit is even efficient at all probs not lmfao
+# TODO: fix the formatting on Daily-reminder, consider creating a datetime object?
 # TODO: make the config stuff a function
 # TODO: inndex removals
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
 # TODO: bdtweentwo tiems tomorow
-# intervals dont work
-# cron wont work
+
 # lots of calls to datetime.now() :/
 
 # Initialization stuff
@@ -45,14 +44,38 @@ mainsched.start()
 
 
 def jobitem_removed(event):
-    user_id = int(event.job_id.split('user')[1])
+    # the listener checks for when a job is removed, or executed and removes it from 'active jobs'
 
+    user_id = int(event.job_id.split('user')[1])
+    job = mainsched.get_job(event.job_id)
+    current_time = datetime.now()
+
+    try:
+        # if end_date exists, check if end_date has already passed, then remove the job if True. if no end_date,
+        # or end_date not passed, execute the function
+        if x := job.trigger.end_date:
+            if current_time >= x:
+                # the end_date has passed, remove hte job
+                pass
+            else:
+                # the end_date has note yet passed, do not remove the job
+                return
+        else:
+            # there is no end_date, the job never ends
+            return
+    except AttributeError:
+        # this is a date job, proceed as normal remove the job
+        pass
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$pull': {'active jobs': event.job_id}})
     logging.info(f"event: {event}, listener activated")
 
 
 mainsched.add_listener(jobitem_removed, EVENT_JOB_EXECUTED | EVENT_JOB_REMOVED)
+
+
+def send_message(contact, msg):
+    ezgmail.send(contact, subject='', body=msg)
 
 
 # serious commands
@@ -99,7 +122,6 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
     if doc is None:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
-    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
 
     # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
     time_of_day = time_of_day.lower().replace(' ', '')
@@ -111,16 +133,16 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
     # define the time of delivery
     propertime = datetime(year, month_of_year, day_of_month, time.hour, time.minute)
 
-    # would use walrus, but heroku doesnt likey
-
+    # check if in the past
     if (x := datetime.now()) > propertime:
         await ctx.send(
             content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
         return
 
-    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'date', run_date=propertime,
-                      args=[individual, message], id=id_)
+    mainsched.add_job(send_message, 'date', run_date=propertime,
+                      args=(message, doc['contact information']), id=id_)
 
+    # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
@@ -160,6 +182,7 @@ async def interval(ctx, duration, increment, message):
         await ctx.send(content="Please enter a valid duration.")
         return
 
+
     # Does their record exist?
     user_id = ctx.author
     id_ = uuid4().hex + "user" + str(user_id)
@@ -168,10 +191,11 @@ async def interval(ctx, duration, increment, message):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=duration,
-                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=id_)
+    end_date = datetime.now() + timedelta(minutes=duration)
+    mainsched.add_job(send_message, 'interval', minutes=increment, end_date=end_date,
+                      args=(message, doc['contact information']), misfire_grace_time=500, replace_existing=True, id=id_)
 
+    # add to  active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
@@ -188,6 +212,7 @@ async def interval(ctx, duration, increment, message):
                  ), ])
 async def define_self(ctx, contact_info):
     user_id = ctx.author
+    # log the user's information in a database
     db.user_data.find_one_and_update({"user id": user_id},
                                      {"$set": {"contact information": contact_info}},
                                      upsert=True)
@@ -232,13 +257,12 @@ async def daily_reminder(ctx, hour, minute, message):
         return
 
     # initialize the class
-    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'cron', args=(individual, message), hour=hour,
+    mainsched.add_job(send_message, 'cron', args=(message, doc['contact information']), hour=hour,
                       minute=minute, misfire_grace_time=500, replace_existing=True, id=id_)
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
-    await ctx.send(content=f"Schedule created: at {hour}:{minute} send {message}")
+    await ctx.send(content=f"Schedule created: for {hour}:{minute} send {message}")
 
 
 @slash.slash(name="between-two-times", description='send messages at an interval between two times throughout the day',
@@ -293,8 +317,6 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    individual = class_scheduling.ScheduledPerson(message, doc["contact information"])
-
     # Format the times
     tomorrow = datetime.now() + timedelta(days=1, hours=0, minutes=0)
     time_1 = datetime.strptime(time_1, '%H:%M')
@@ -303,18 +325,18 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
     time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
     time_2 = datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
 
-    between_times_interval(individual, message, time_1, time_2, interval, user_id)
+    between_times_interval(message, doc['contact information'], time_1, time_2, interval, user_id)
 
     if repeating == 'True':
         # make sure that the call for repeating starts the next day, not today, not two days from now
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
-                              args=(individual, message, time_1, time_2, interval, user_id),
+                              args=(message, doc['contact information'], time_1, time_2, interval, user_id),
                               misfire_grace_time=500, replace_existing=True, id=id_)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
-                              args=(individual, message, time_1, time_2, interval, user_id),
+                              args=(message, doc['contact information'], time_1, time_2, interval, user_id),
                               misfire_grace_time=500, replace_existing=True, id=id_)
 
         db.bot_usage.find_one_and_update({'user id': user_id},
@@ -325,7 +347,7 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
 
 
 # error comes up when the function is placed in the above function, so it's here /shrug
-def between_times_interval(individual, message, time_1, time_2, interval, user_id):
+def between_times_interval(message, contact, time_1, time_2, interval, user_id):
     id_ = uuid4().hex + "user" + str(user_id)
     today = datetime.today()
     time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
@@ -333,10 +355,10 @@ def between_times_interval(individual, message, time_1, time_2, interval, user_i
     if time_1 > time_2:
         time_2 += timedelta(days=1, hours=0, minutes=0)
 
-    mainsched.add_job(class_scheduling.ScheduledPerson.send_message, 'interval', minutes=interval,
+    mainsched.add_job(send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
-                      args=(individual, message), misfire_grace_time=500, replace_existing=True, id=id_)
+                      args=(message, contact), misfire_grace_time=500, replace_existing=True, id=id_)
 
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
@@ -380,7 +402,7 @@ async def get_schedule(ctx):
             next_run_time = format_dt(jobtime)
             str_out += f"*Job: {job_count}* \n" \
                        f"**Next run time**: {next_run_time} \n" \
-                       f"**Message**: {job.args[1]} \n" \
+                       f"**Message**: {job.args[0]} \n" \
                        f"__Trigger__: {jobtrig} \n\n"
 
             job_count += 1
