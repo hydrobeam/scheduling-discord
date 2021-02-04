@@ -20,8 +20,8 @@ Can also be configured to email to SMS using an SMS gateway depending on the car
 ### Sample input
 
 > **/date-message**: Setting a reminder for a specific date/time
-![img_1.png](img_1.png)
+![img_1.png](https://github.com/hydrobeam/scheduling-discord/blob/main/img_1.png)
   
 > **/get-schedule**: Get a list of scheduled tasks
-![img.png](img.png)
+![img.png](https://github.com/hydrobeam/scheduling-discord/blob/main/img.png)
 ### uses mongodb, gmail api and apscheduler to store, send and schedule messages
