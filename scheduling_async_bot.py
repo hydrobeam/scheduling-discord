@@ -6,10 +6,12 @@ from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
 from pymongo import MongoClient
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from uuid import uuid4
 import logging
 import ezgmail
+from pytz import timezone
+import pytz
 
 from pprint import pprint
 
@@ -20,6 +22,7 @@ from pprint import pprint
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
 # TODO: bdtweentwo tiems tomorow
+# TODO: custom timzeone for all the jobs, introdouce time zone into define-self
 
 # Initialization stuff
 
@@ -45,7 +48,7 @@ def jobitem_removed(event):
 
     user_id = int(event.job_id.split('user')[1])
     job = mainsched.get_job(event.job_id)
-    current_time = datetime.now(timezone(timedelta(hours=-5)))
+    current_time = datetime.now(timezone('America/New_York'))
 
     try:
         # if end_date exists, check if end_date has already passed, then remove the job if True. if no end_date,
@@ -77,7 +80,7 @@ def send_message(contact, msg):
 
 # serious commands
 
-# lots of calls to datetime.now(timezone(timedelta(hours=-5))) :/ maybe a decorator can fix that?
+# lots of calls to datetime.now(propertime('America/New_York') :/ maybe a decorator can fix that?
 @slash.slash(name="date-mess", description="send a message at a specific date and time", guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
@@ -111,8 +114,8 @@ def send_message(contact, msg):
                      required=False
                  )
              ])
-async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(timezone(timedelta(hours=-5))).day, month_of_year=datetime.now(timezone(timedelta(hours=-5))).month,
-                       year=datetime.now(timezone(timedelta(hours=-5))).year):
+async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(timezone('America/New_York')).day, month_of_year=datetime.now(timezone('America/New_York')).month,
+                       year=datetime.now(timezone('America/New_York').year)):
     user_id = ctx.author
     id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
@@ -128,13 +131,12 @@ async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(time
         time = datetime.strptime(time_of_day, '%H:%M')
     logging.warning(f"datetime: {time}")
 
-    # define the time of delivery
-    propertime = datetime(year, month_of_year, day_of_month, time.hour, time.minute)
-    logging.warning(propertime)
+    # define the time of delivery, causews my issue
+    active_tz = timezone('America/New_York')
+    propertime = active_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
 
     # check if in the past
-    if (x := datetime.now(timezone(timedelta(hours=-5)))) > propertime:
-        logging.warning(f"x : {x}")
+    if (x := datetime.now(timezone('America/New_York'))) > propertime:
         await ctx.send(
             content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
         return
@@ -190,7 +192,7 @@ async def interval(ctx, duration, increment, message):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    end_date = datetime.now(timezone(timedelta(hours=-5))) + timedelta(minutes=duration)
+    end_date = datetime.now(timezone('America/New_York') + timedelta(minutes=duration))
     mainsched.add_job(send_message, 'interval', minutes=increment, end_date=end_date,
                       args=(message, doc['contact information']), misfire_grace_time=500, replace_existing=True, id=id_)
 
@@ -316,7 +318,7 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
     # Format the times
-    tomorrow = datetime.now(timezone(timedelta(hours=-5))) + timedelta(days=1, hours=0, minutes=0)
+    tomorrow = datetime.now(timezone('America/New_York') + timedelta(days=1, hours=0, minutes=0))
     time_1 = datetime.strptime(time_1, '%H:%M')
     time_2 = datetime.strptime(time_2, '%H:%M')
     today = datetime.today()
