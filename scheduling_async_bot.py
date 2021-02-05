@@ -372,7 +372,7 @@ async def get_schedule(ctx):
     # find the users active jobs
     temp = db.bot_usage.find_one({'user id': user_id})
     str_out = "No jobs found"
-    if temp['aherctive jobs']:
+    if temp['active jobs']:
         str_out = ""
         job_count = 1
         for value in temp['active jobs']:
