@@ -115,7 +115,7 @@ def send_message(contact, msg):
                  )
              ])
 async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(timezone('America/New_York')).day, month_of_year=datetime.now(timezone('America/New_York')).month,
-                       year=datetime.now(timezone('America/New_York').year)):
+                       year=datetime.now(timezone('America/New_York')).year):
     user_id = ctx.author
     id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
@@ -129,7 +129,6 @@ async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(time
         time = datetime.strptime(time_of_day, '%I:%M%p')
     else:
         time = datetime.strptime(time_of_day, '%H:%M')
-    logging.warning(f"datetime: {time}")
 
     # define the time of delivery, causews my issue
     active_tz = timezone('America/New_York')
