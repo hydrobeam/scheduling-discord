@@ -1,17 +1,20 @@
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils import manage_commands
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
 from pymongo import MongoClient
+
 from datetime import timedelta, datetime
+from pytz import timezone
 from uuid import uuid4
 import logging
-import ezgmail
-from pytz import timezone
-import pytz
+
+import utility
+from utility import format_dt, short_dt
 
 from pprint import pprint
 
@@ -22,11 +25,10 @@ from pprint import pprint
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
 # TODO: bdtweentwo tiems tomorow
-# TODO: custom timzeone for all the jobs, introdouce time zone into define-self
 
 # Initialization stuff
 
-#coloredlogs.install()
+# coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
@@ -74,13 +76,20 @@ def jobitem_removed(event):
 mainsched.add_listener(jobitem_removed, EVENT_JOB_EXECUTED | EVENT_JOB_REMOVED)
 
 
-def send_message(contact, msg):
-    ezgmail.send(contact, subject='', body=msg)
-
-
 # serious commands
 
-# lots of calls to datetime.now(propertime('America/New_York') :/ maybe a decorator can fix that?
+def basic_init(ctx):
+    user_id = ctx.author
+    id_ = uuid4().hex + "user" + str(user_id)
+    doc = db.user_data.find_one({"user id": user_id})
+    user_tz = doc['timezone']
+    if doc is None:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+    else:
+        return user_id, id_, doc, user_tz
+
+
 @slash.slash(name="date-mess", description="send a message at a specific date and time", guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
@@ -114,14 +123,19 @@ def send_message(contact, msg):
                      required=False
                  )
              ])
-async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(timezone('America/New_York')).day, month_of_year=datetime.now(timezone('America/New_York')).month,
-                       year=datetime.now(timezone('America/New_York')).year):
-    user_id = ctx.author
-    id_ = uuid4().hex + "user" + str(user_id)
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_year=None,
+                       year=None):
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
+    if day_of_month is None:
+        day_of_month = datetime.now(timezone('America/New_York')).day
+    if month_of_year is None:
+        month_of_year = datetime.now(timezone('America/New_York')).month
+    if year is None:
+        year = datetime.now(timezone('America/New_York')).year
+
 
     # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
     time_of_day = time_of_day.lower().replace(' ', '')
@@ -137,17 +151,18 @@ async def date_message(ctx, message, time_of_day, day_of_month=datetime.now(time
     # check if in the past
     if (x := datetime.now(timezone('America/New_York'))) > propertime:
         await ctx.send(
-            content=f"Chosen time: **{propertime.strftime('%X')}** is earlier than current time: **{x.strftime('%X')}**. Please choose a valid date")
+            content=f"Chosen time: **{format_dt(propertime)}** is earlier than current time: **{format_dt(x)}"
+                    f"**. Please choose a valid date")
         return
 
-    mainsched.add_job(send_message, 'date', run_date=propertime,
+    mainsched.add_job(utility.send_message, 'date', run_date=propertime,
                       args=(message, doc['contact information']), id=id_)
 
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
-    await ctx.send(content=f"**{message}** Message sent, due for {format_dt(propertime)}.")
+    await ctx.send(content=f"**{message}** Message scheduled, due for {format_dt(propertime)}.")
 
 
 @slash.slash(name="interval-message", description="repeat a message for a specified duration/interval",
@@ -184,15 +199,13 @@ async def interval(ctx, duration, increment, message):
         return
 
     # Does their record exist?
-    user_id = ctx.author
-    id_ = uuid4().hex + "user" + str(user_id)
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
 
     end_date = datetime.now(timezone('America/New_York') + timedelta(minutes=duration))
-    mainsched.add_job(send_message, 'interval', minutes=increment, end_date=end_date,
+    mainsched.add_job(utility.send_message, 'interval', minutes=increment, end_date=end_date,
                       args=(message, doc['contact information']), misfire_grace_time=500, replace_existing=True, id=id_)
 
     # add to  active jobs
@@ -209,12 +222,24 @@ async def interval(ctx, duration, increment, message):
                      description="Your phone number's email address: {your carrier} SMS Gateway",
                      option_type=3,
                      required=True
-                 ), ])
-async def define_self(ctx, contact_info):
+                 ),
+                 manage_commands.create_option(
+                     name="timezone",
+                     description="tz timezone, continent+city|samples: 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', see https://bit.ly/3jnoCRE for full list (default = 'America/New_York' or EST)",
+                     option_type=3,
+                     required=False
+                 )
+             ])
+async def define_self(ctx, contact_info, timezone='America/New_York'):
     user_id = ctx.author
     # log the user's information in a database
+    with open('timezones.txt', 'r') as file:
+        if timezone not in file:
+            await ctx.send(f"*{timezone}* is not a  tz timezone, please pick a valid neighbour")
+            return
+
     db.user_data.find_one_and_update({"user id": user_id},
-                                     {"$set": {"contact information": contact_info}},
+                                     {"$set": {"contact information": contact_info, "timezone": timezone}},
                                      upsert=True)
 
     db.bot_usage.find_one_and_update(
@@ -223,7 +248,7 @@ async def define_self(ctx, contact_info):
         upsert=True
     )
 
-    await ctx.send(content=f"Contact information registered: {contact_info}", complete_hidden=True)
+    await ctx.send(content=f"Information registered: {contact_info}, {timezone}", complete_hidden=True)
 
 
 @slash.slash(name="daily-reminder", description="Set a daily reminder", guild_ids=guild_ids,
@@ -249,15 +274,13 @@ async def define_self(ctx, contact_info):
              ])
 async def daily_reminder(ctx, hour, minute, message):
     # init data
-    user_id = ctx.author
-    id_ = uuid4().hex + "user" + str(user_id)
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
 
     # initialize the class
-    mainsched.add_job(send_message, 'cron', args=(message, doc['contact information']), hour=hour,
+    mainsched.add_job(utility.send_message, 'cron', args=(message, doc['contact information']), hour=hour,
                       minute=minute, misfire_grace_time=500, replace_existing=True, id=id_)
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
@@ -310,19 +333,17 @@ async def daily_reminder(ctx, hour, minute, message):
                  )
              ])
 async def between_times(ctx, time_1, time_2, interval, message, repeating):
-    user_id = ctx.author
-    id_ = uuid4().hex + "user" + str(user_id)
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
     # Format the times
-    tomorrow = datetime.now(timezone('America/New_York') + timedelta(days=1, hours=0, minutes=0))
+    tomorrow = datetime.now(tz=user_tz) + timedelta(days=1, hours=0, minutes=0)
     time_1 = datetime.strptime(time_1, '%H:%M')
     time_2 = datetime.strptime(time_2, '%H:%M')
-    today = datetime.today()
-    time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
-    time_2 = datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
+    today = datetime.now(tz=user_tz)
+    time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
+    time_2 = today.replace(hour=time_2.hour, minute=time_2.minute)
 
     between_times_interval(message, doc['contact information'], time_1, time_2, interval, user_id)
 
@@ -330,31 +351,32 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
         # make sure that the call for repeating starts the next day, not today, not two days from now
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
-                              args=(message, doc['contact information'], time_1, time_2, interval, user_id),
+                              args=(message, doc['contact information'], time_1, time_2, interval, user_id, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
-                              args=(message, doc['contact information'], time_1, time_2, interval, user_id),
+                              args=(message, doc['contact information'], time_1, time_2, interval, user_id, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_)
 
         db.bot_usage.find_one_and_update({'user id': user_id},
                                          {'$push': {'active jobs': id_}})
 
     await ctx.send(
-        content=f"Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** Repeating: {repeating}")
+        content=f"Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** "
+                f"Repeating: {repeating}")
 
 
 # error comes up when the function is placed in the above function, so it's here /shrug
-def between_times_interval(message, contact, time_1, time_2, interval, user_id):
+def between_times_interval(message, contact, time_1, time_2, interval, user_id, user_tz):
     id_ = uuid4().hex + "user" + str(user_id)
-    today = datetime.today()
-    time_1 = datetime(today.year, today.month, today.day, time_1.hour, time_1.minute)
-    time_2 = datetime(today.year, today.month, today.day, time_2.hour, time_2.minute)
+    today = datetime.now(tz=user_tz)
+    time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
+    time_2 = today.replace(hour=time_2.hour, minute=time_2.minute)
     if time_1 > time_2:
         time_2 += timedelta(days=1, hours=0, minutes=0)
 
-    mainsched.add_job(send_message, 'interval', minutes=interval,
+    mainsched.add_job(utility.send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
                       args=(message, contact), misfire_grace_time=500, replace_existing=True, id=id_)
@@ -366,10 +388,9 @@ def between_times_interval(message, contact, time_1, time_2, interval, user_id):
 @slash.slash(name="get-sched", description="acquire your listed schedule", guild_ids=guild_ids)
 async def get_schedule(ctx):
     # the verification process
-    user_id = ctx.author
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
 
     # find the users active jobs
@@ -409,25 +430,13 @@ async def get_schedule(ctx):
     await ctx.send(content=str_out)
 
 
-def format_dt(dtobject):
-    ymd = f"{dtobject.strftime('%b')} {dtobject.day} {dtobject.year}"
-    formatted = f"{dtobject.strftime('%A')} {dtobject.hour % 12}:{dtobject.strftime('%M')} {dtobject.strftime('%p')} | {ymd}"
-    return formatted
-
-
-def short_dt(dtobject):
-    formatted = f"{dtobject.hour % 12}:{dtobject.strftime('%M')} {dtobject.strftime('%p')}"
-    return formatted
-
-
 @slash.slash(name="remove-schedule", description="remove all listed jobs", guild_ids=guild_ids)
 async def remove_schedule(ctx):
     # TODO: allow for index deletion
     # verification process
-    user_id = ctx.author
-    doc = db.user_data.find_one({"user id": user_id})
-    if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
         return
 
     temp = db.bot_usage.find_one({'user id': user_id})
@@ -448,16 +457,6 @@ async def remove_schedule(ctx):
 @slash.slash(name="ping", guild_ids=guild_ids)
 async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
     await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
-
-
-@slash.slash(name="hello", description="say hello!", guild_ids=guild_ids)
-async def hello(ctx):
-    await ctx.send(content="hello :)")
-
-
-@slash.slash(name="bye", description="say bye bye :(", guild_ids=guild_ids)
-async def bye(ctx):
-    await ctx.send(content="bye bye :o")
 
 
 client.run("ODAyMzYzNDM1MzM3MjUyODY0.YAuJLg.gC0EWPOtik2ct2jXO5gaNxw66pE")
