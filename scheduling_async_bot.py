@@ -8,7 +8,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
 from pymongo import MongoClient
 from datetime import timedelta, datetime, timezone
 from uuid import uuid4
-import logging, coloredlogs
+import logging
 import ezgmail
 
 from pprint import pprint
@@ -23,7 +23,7 @@ from pprint import pprint
 
 # Initialization stuff
 
-coloredlogs.install()
+#coloredlogs.install()
 client = discord.Client()
 slash = SlashCommand(client, auto_register=True, auto_delete=True)
 mongoclient = MongoClient("mongodb+srv://BotOwner:M26ToshtFDBuT6SY@schedule-bot.c6ats.mongodb.net/discord"
