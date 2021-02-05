@@ -6,7 +6,6 @@ from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
 from pymongo import MongoClient
-import class_scheduling
 from datetime import timedelta, datetime
 from uuid import uuid4
 import logging
@@ -21,8 +20,6 @@ from pprint import pprint
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
 # TODO: bdtweentwo tiems tomorow
-
-# lots of calls to datetime.now() :/
 
 # Initialization stuff
 
@@ -81,7 +78,7 @@ def send_message(contact, msg):
 # serious commands
 
 # lots of calls to datetime.now :/ maybe a decorator can fix that?
-@slash.slash(name="date-message", description="send a message at a specific date and time", guild_ids=guild_ids,
+@slash.slash(name="date-mess", description="send a message at a specific date and time", guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
                      name="message",
@@ -114,8 +111,8 @@ def send_message(contact, msg):
                      required=False
                  )
              ])
-async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month_of_year=datetime.now().month,
-               year=datetime.now().year):
+async def date_message(ctx, message, time_of_day, day_of_month=datetime.now().day, month_of_year=datetime.now().month,
+                       year=datetime.now().year):
     user_id = ctx.author
     id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
@@ -146,7 +143,7 @@ async def date(ctx, message, time_of_day, day_of_month=datetime.now().day, month
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
-    await ctx.send(content=f"**{message}** Message sent, due for {propertime}.")
+    await ctx.send(content=f"**{message}** Message sent, due for {format_dt(propertime)}.")
 
 
 @slash.slash(name="interval-message", description="repeat a message for a specified duration/interval",
@@ -181,7 +178,6 @@ async def interval(ctx, duration, increment, message):
     elif duration < 1:
         await ctx.send(content="Please enter a valid duration.")
         return
-
 
     # Does their record exist?
     user_id = ctx.author
@@ -364,7 +360,7 @@ def between_times_interval(message, contact, time_1, time_2, interval, user_id):
                                      {'$push': {'active jobs': id_}})
 
 
-@slash.slash(name="get-schedule", description="acquire your listed schedule", guild_ids=guild_ids)
+@slash.slash(name="get-sched", description="acquire your listed schedule", guild_ids=guild_ids)
 async def get_schedule(ctx):
     # the verification process
     user_id = ctx.author
@@ -376,7 +372,7 @@ async def get_schedule(ctx):
     # find the users active jobs
     temp = db.bot_usage.find_one({'user id': user_id})
     str_out = "No jobs found"
-    if temp['active jobs']:
+    if temp['aherctive jobs']:
         str_out = ""
         job_count = 1
         for value in temp['active jobs']:
