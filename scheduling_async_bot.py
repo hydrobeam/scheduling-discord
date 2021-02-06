@@ -13,14 +13,12 @@ from pytz import timezone
 from uuid import uuid4
 import logging
 
-import utility
-from utility import format_dt, short_dt
+from utility_file import format_dt, short_dt,send_message
 
 from pprint import pprint
 
 # TODO: prioritize email in presenation
-# TODO: fix the formatting on Daily-reminder, consider creating a datetime object?
-# TODO: make the config stuff a function
+# TODO: make the config stuff a separete file
 # TODO: inndex removals
 # TODO: if name == 'main' ?
 # TODO: Interval message redundant? evaluate
@@ -41,7 +39,7 @@ guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 jobstores = {
     'default': MongoDBJobStore(client=mongoclient, collection="scheduled-job")
 }
-mainsched = AsyncIOScheduler(jobstores=jobstores, timezone="America/New_York")
+mainsched = AsyncIOScheduler(jobstores=jobstores)
 mainsched.start()
 
 
@@ -82,9 +80,8 @@ def basic_init(ctx):
     user_id = ctx.author
     id_ = uuid4().hex + "user" + str(user_id)
     doc = db.user_data.find_one({"user id": user_id})
-    user_tz = doc['timezone']
+    user_tz = timezone(doc['timezone'])
     if doc is None:
-        await ctx.send(content=f"Please register your information with 'define-self'")
         return
     else:
         return user_id, id_, doc, user_tz
@@ -128,13 +125,14 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
     if day_of_month is None:
-        day_of_month = datetime.now(timezone('America/New_York')).day
+        day_of_month = datetime.now(user_tz).day
     if month_of_year is None:
-        month_of_year = datetime.now(timezone('America/New_York')).month
+        month_of_year = datetime.now(user_tz).month
     if year is None:
-        year = datetime.now(timezone('America/New_York')).year
+        year = datetime.now(user_tz).year
 
 
     # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
@@ -145,18 +143,17 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
         time = datetime.strptime(time_of_day, '%H:%M')
 
     # define the time of delivery, causews my issue
-    active_tz = timezone('America/New_York')
-    propertime = active_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
+    propertime = user_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
 
     # check if in the past
-    if (x := datetime.now(timezone('America/New_York'))) > propertime:
+    if (x := datetime.now(user_tz)) > propertime:
         await ctx.send(
             content=f"Chosen time: **{format_dt(propertime)}** is earlier than current time: **{format_dt(x)}"
                     f"**. Please choose a valid date")
         return
 
-    mainsched.add_job(utility.send_message, 'date', run_date=propertime,
-                      args=(message, doc['contact information']), id=id_)
+    mainsched.add_job(send_message, 'date', run_date=propertime,
+                      args=(message, doc['contact information']), id=id_, timezone=user_tz)
 
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
@@ -202,11 +199,12 @@ async def interval(ctx, duration, increment, message):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    end_date = datetime.now(timezone('America/New_York') + timedelta(minutes=duration))
-    mainsched.add_job(utility.send_message, 'interval', minutes=increment, end_date=end_date,
-                      args=(message, doc['contact information']), misfire_grace_time=500, replace_existing=True, id=id_)
+    end_date = datetime.now(user_tz) + timedelta(minutes=duration)
+    mainsched.add_job(send_message, 'interval', minutes=increment, end_date=end_date,
+                      args=(message, doc['contact information']), misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
     # add to  active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
@@ -225,30 +223,29 @@ async def interval(ctx, duration, increment, message):
                  ),
                  manage_commands.create_option(
                      name="timezone",
-                     description="tz timezone, continent+city|samples: 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', see https://bit.ly/3jnoCRE for full list (default = 'America/New_York' or EST)",
+                     description="default='America/New_York' tz timezone, continent+city see https://cutt.ly/discord-timezone",
                      option_type=3,
                      required=False
                  )
              ])
-async def define_self(ctx, contact_info, timezone='America/New_York'):
+async def define_self(ctx, contact_info, tz='America/New_York'):
     user_id = ctx.author
     # log the user's information in a database
     with open('timezones.txt', 'r') as file:
-        if timezone not in file:
-            await ctx.send(f"*{timezone}* is not a  tz timezone, please pick a valid neighbour")
+        moxy = file.read().splitlines()
+        if tz not in moxy:
+            await ctx.send(content=f"*{tz}* is not a tz timezone, please pick a valid neighbour")
             return
 
     db.user_data.find_one_and_update({"user id": user_id},
-                                     {"$set": {"contact information": contact_info, "timezone": timezone}},
+                                     {"$set": {"contact information": contact_info, "timezone": tz}},
                                      upsert=True)
-
     db.bot_usage.find_one_and_update(
         {'user id': user_id},
         {"$setOnInsert": {'active jobs': []}},
         upsert=True
     )
-
-    await ctx.send(content=f"Information registered: {contact_info}, {timezone}", complete_hidden=True)
+    await ctx.send(content=f"Information registered: {contact_info}, Timezone: {tz}", complete_hidden=True)
 
 
 @slash.slash(name="daily-reminder", description="Set a daily reminder", guild_ids=guild_ids,
@@ -277,11 +274,12 @@ async def daily_reminder(ctx, hour, minute, message):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     # initialize the class
-    mainsched.add_job(utility.send_message, 'cron', args=(message, doc['contact information']), hour=hour,
-                      minute=minute, misfire_grace_time=500, replace_existing=True, id=id_)
+    mainsched.add_job(send_message, 'cron', args=(message, doc['contact information']), hour=hour,
+                      minute=minute, misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
@@ -336,6 +334,7 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
     # Format the times
     tomorrow = datetime.now(tz=user_tz) + timedelta(days=1, hours=0, minutes=0)
@@ -352,12 +351,12 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating):
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
                               args=(message, doc['contact information'], time_1, time_2, interval, user_id, user_tz),
-                              misfire_grace_time=500, replace_existing=True, id=id_)
+                              misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
                               args=(message, doc['contact information'], time_1, time_2, interval, user_id, user_tz),
-                              misfire_grace_time=500, replace_existing=True, id=id_)
+                              misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
         db.bot_usage.find_one_and_update({'user id': user_id},
                                          {'$push': {'active jobs': id_}})
@@ -376,10 +375,10 @@ def between_times_interval(message, contact, time_1, time_2, interval, user_id, 
     if time_1 > time_2:
         time_2 += timedelta(days=1, hours=0, minutes=0)
 
-    mainsched.add_job(utility.send_message, 'interval', minutes=interval,
+    mainsched.add_job(send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
-                      args=(message, contact), misfire_grace_time=500, replace_existing=True, id=id_)
+                      args=(message, contact), misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
@@ -391,6 +390,7 @@ async def get_schedule(ctx):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     # find the users active jobs
@@ -416,8 +416,10 @@ async def get_schedule(ctx):
                     jobtrig += f" | **Start time**: {x} "
                 if x := short_dt(trig.end_date):
                     jobtrig += f"**End time**: {x}"
+                jobtrig += f"**Timezone**: {trig.timezone}"
             except AttributeError:
                 pass
+
 
             next_run_time = format_dt(jobtime)
             str_out += f"*Job: {job_count}* \n" \
@@ -437,6 +439,7 @@ async def remove_schedule(ctx):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     temp = db.bot_usage.find_one({'user id': user_id})
