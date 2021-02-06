@@ -143,24 +143,58 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
         time = datetime.strptime(time_of_day, '%H:%M')
 
     # define the time of delivery, causews my issue
-    propertime = user_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
+    planned_time = user_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
 
     # check if in the past
-    if (x := datetime.now(user_tz)) > propertime:
+    if (x := datetime.now(user_tz)) > planned_time:
         await ctx.send(
-            content=f"Chosen time: **{format_dt(propertime)}** is earlier than current time: **{format_dt(x)}"
+            content=f"Chosen time: **{format_dt(planned_time)}** is earlier than current time: **{format_dt(x)}"
                     f"**. Please choose a valid date")
         return
 
-    mainsched.add_job(send_message, 'date', run_date=propertime,
+    mainsched.add_job(send_message, 'date', run_date=planned_time,
                       args=(message, doc['contact information']), id=id_, timezone=user_tz)
 
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
-    await ctx.send(content=f"**{message}** Message scheduled, due for {format_dt(propertime)}.")
+    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}")
 
+
+@slash.slash(name="time-from-now", description="schedule a message for certain time from now", guild_ids=guild_ids,
+             options=[
+                 manage_commands.create_option(
+                     name="message",
+                     description="message to be delivered",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="time",
+                     description="time from current time in minutes",
+                     option_type=4,
+                     required=True
+                 )
+             ])
+async def time_from_now(ctx, message, duration):
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
+        await ctx.send(content=f"Please register your information with 'define-self'")
+        return
+
+    planned_time = datetime.now(tz=user_tz) + timedelta(minutes=duration)
+
+    mainsched.add_job(send_message, 'date', run_date=planned_time, args=(message, doc['contact information']),
+                      misfire_grace_time=500, replace_existing=True, id=id_,
+                      timezone=user_tz)
+
+    # add to  active jobs
+    db.bot_usage.find_one_and_update({'user id': user_id},
+                                     {'$push': {'active jobs': id_}})
+
+    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
 
 @slash.slash(name="interval-message", description="repeat a message for a specified duration/interval",
              guild_ids=guild_ids,
@@ -210,7 +244,7 @@ async def interval(ctx, duration, increment, message):
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
-    await ctx.send(content=f"Message created: {message}", complete_hidden=True)
+    await ctx.send(content=f"Message created: {message} ", complete_hidden=True)
 
 
 @slash.slash(name="define-self", description="Initialize your details", guild_ids=guild_ids,
@@ -418,7 +452,8 @@ async def get_schedule(ctx):
                     jobtrig += f"**End time**: {x}"
                 jobtrig += f"**Timezone**: {trig.timezone}"
             except AttributeError:
-                pass
+                from pprint import pprint
+            print(dir(trig))
 
 
             next_run_time = format_dt(jobtime)
