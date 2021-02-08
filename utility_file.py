@@ -18,8 +18,3 @@ def short_dt(dtobject):
     return formatted
 
 
-def send_message(msg, contact):
-    """
-    sends a message
-    """
-    ezgmail.send(contact, subject='', body=msg)
