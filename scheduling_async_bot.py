@@ -177,57 +177,6 @@ async def time_from_now(ctx, message, duration):
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
 
 
-@slash.slash(name="interval-message", description="repeat a message for a specified duration/interval",
-             guild_ids=guild_ids,
-             options=[
-                 manage_commands.create_option(
-                     name="duration",
-                     description="duration of the total interval in minutes. Max value: 720 (12 hours) ",
-                     option_type=4,
-                     required=True
-                 ),
-                 manage_commands.create_option(
-                     name="time_interval",
-                     description="time_interval in minutes. Minimum value: 20",
-                     option_type=4,
-                     required=True
-                 ),
-                 manage_commands.create_option(
-                     name="message",
-                     description="message you would like delivered",
-                     option_type=3,
-                     required=True,
-                 )
-             ]
-             )
-async def interval(ctx, duration, increment, message):
-    # Establish the bounds
-    if increment < 20:
-        increment = 20
-    if duration > 720:
-        duration = 720
-    elif duration < 1:
-        await ctx.send(content="Please enter a valid duration.")
-        return
-
-    # Does their record exist?
-    try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
-    except TypeError:
-        await ctx.send(content=f"Please register your information with 'define-self'")
-        return
-
-    end_date = datetime.now(user_tz) + timedelta(minutes=duration)
-    mainsched.add_job(send_message, 'interval', minutes=increment, end_date=end_date,
-                      args=(message, doc['contact information'], dm, user_id), misfire_grace_time=500, replace_existing=True, id=id_,
-                      timezone=user_tz)
-
-    # add to  active jobs
-    db.bot_usage.find_one_and_update({'user id': user_id},
-                                     {'$push': {'active jobs': id_}})
-
-    await ctx.send(content=f"⏰ Message: **{message}** - to end at *{format_dt(end_date)}*")
-
 
 @slash.slash(name="define-self", description="Initialize your details", guild_ids=guild_ids,
              options=[
@@ -541,14 +490,7 @@ async def remove_index(ctx, index):
     await ctx.send(content=f"⏰ Command executed, **Index**: {index} job removed")
 
 
-# fun commands
-
-
-@slash.slash(name="ping", guild_ids=guild_ids)
-async def _ping(ctx):  # Defines a new "context" (ctx) command called "ping."
-    await ctx.send(content=f"Pong! ({client.latency * 1000}ms)")
-
-
+# the listener
 def jobitem_removed(event):
     """
         the listener checks for when a job is removed or executed and removes it from 'active jobs'
