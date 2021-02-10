@@ -12,7 +12,7 @@ from datetime import timedelta, datetime
 from pytz import timezone
 from uuid import uuid4
 
-import configparser, logging, coloredlogs
+import configparser, logging
 
 from utility_file import format_dt, short_dt, strhour_to_dt
 import ezgmail
@@ -32,7 +32,7 @@ slash = SlashCommand(client, auto_register=True, auto_delete=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 
-coloredlogs.install()
+
 # serious commands
 
 async def send_message(msg, contact, discord, user_id):
