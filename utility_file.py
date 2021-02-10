@@ -1,4 +1,4 @@
-import ezgmail
+from datetime import datetime
 
 
 def format_dt(dtobject):
@@ -12,9 +12,23 @@ def format_dt(dtobject):
 
 def short_dt(dtobject):
     """
-    format: 5:03pm ; datetime--> string
+    format: 5:03 PM ; datetime--> string
     """
     formatted = f"{dtobject.strftime('%I')}:{dtobject.strftime('%M')} {dtobject.strftime('%p')}"
     return formatted
 
+def strhour_to_dt(time_of_day):
+    time_of_day = time_of_day.lower().replace(' ', '')
+    if "am" in time_of_day or "pm" in time_of_day:
+        if ":" in time_of_day:
+            # 7:09pm
+            time = datetime.strptime(time_of_day, '%I:%M%p')
+        else:
+            # 7pm
+            time = datetime.strptime(time_of_day, '%I%p')
 
+    else:
+        # 23:01
+        time = datetime.strptime(time_of_day, '%H:%M')
+
+    return time

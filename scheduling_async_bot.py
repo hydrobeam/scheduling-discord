@@ -12,17 +12,17 @@ from datetime import timedelta, datetime
 from pytz import timezone
 from uuid import uuid4
 
-import configparser
+import configparser, logging, coloredlogs
 
-from utility_file import format_dt, short_dt
+from utility_file import format_dt, short_dt, strhour_to_dt
 import ezgmail
+from googleapiclient.errors import HttpError
 
 from pprint import pprint
 
-# TODO: prioritize email in presenation
-# TODO: inndex removals
-# TODO: Interval message redundant? evaluate
+# TODO: optional hidden
 # TODO: bdtweentwo tiems tomorow
+# TODO: change time format --> HH:MM + 10pm
 
 # Initialization stuff
 intents = discord.Intents.default()
@@ -32,14 +32,18 @@ slash = SlashCommand(client, auto_register=True, auto_delete=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 
-# coloredlogs.install()
+coloredlogs.install()
 # serious commands
 
 async def send_message(msg, contact, discord, user_id):
     """
     sends a message
     """
-    ezgmail.send(contact, subject='', body=msg)
+    try:
+        ezgmail.send(contact, subject='', body=msg)
+    except HttpError:
+        # the email provided is invalid
+        logging.exception("Exception on email delivery")
     if discord:
         await send_discord_message(msg, user_id)
 
@@ -53,18 +57,21 @@ async def send_discord_message(msg, user_id):
 
 
 def basic_init(ctx):
-    # initialization of basic values
+    """initialization of basic values"""
+
     user_id = ctx.author.id
+    # generate a unique id + the user_id
     id_ = uuid4().hex + "user" + str(user_id)
+    # access information in define_self
     doc = db.user_data.find_one({"user id": user_id})
+    # user timezone
     user_tz = timezone(doc['timezone'])
+    # dm preference
     dm = doc['direct_message']
     if doc is None:
         return
     else:
         return user_id, id_, doc, user_tz, dm
-
-
 
 
 @slash.slash(name="date-message", description="send a message at a specific date and time", guild_ids=guild_ids,
@@ -115,11 +122,7 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
         year = datetime.now(user_tz).year
 
     # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
-    time_of_day = time_of_day.lower().replace(' ', '')
-    if "am" in time_of_day or "pm" in time_of_day:
-        time = datetime.strptime(time_of_day, '%I:%M%p')
-    else:
-        time = datetime.strptime(time_of_day, '%H:%M')
+    time = strhour_to_dt(time_of_day)
 
     # define the time of delivery,
     planned_time = user_tz.localize(datetime(year, month_of_year, day_of_month, time.hour, time.minute))
@@ -163,7 +166,7 @@ async def time_from_now(ctx, message, duration):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    planned_time = datetime.now(tz=user_tz) + timedelta(seconds=duration)
+    planned_time = datetime.now(tz=user_tz) + timedelta(minutes=duration)
 
     mainsched.add_job(send_message, 'date', run_date=planned_time,
                       args=(message, doc['contact information'], dm, user_id),
@@ -175,7 +178,6 @@ async def time_from_now(ctx, message, duration):
                                      {'$push': {'active jobs': id_}})
 
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
-
 
 
 @slash.slash(name="define-self", description="Initialize your details", guild_ids=guild_ids,
@@ -209,8 +211,8 @@ async def time_from_now(ctx, message, duration):
 
              ]
              )
-async def define_self(ctx, contact_info, direct_message, tz='America/New_York', ):
-    # dm has to be Yes/ No because choices dont support True False
+async def define_self(ctx, contact_info, direct_message, tz='America/New_York',):
+    # dm has to be Yes/ No because choices dont support True False bools
 
     user_id = ctx.author.id
     # check if the timezone value provided is valid
@@ -240,19 +242,20 @@ async def define_self(ctx, contact_info, direct_message, tz='America/New_York', 
 @slash.slash(name="daily-reminder", description="Set a daily reminder", guild_ids=guild_ids,
              options=[
                  manage_commands.create_option(
-                     name="time",
-                     description="time of day - HH:MM",
-                     option_type=3,
-                     required=True
-                 ),
-                 manage_commands.create_option(
                      name="message",
                      description="specify message",
                      option_type=3,
                      required=True
-                 )
+                 ),
+                 manage_commands.create_option(
+                     name="time",
+                     description="time of day",
+                     option_type=3,
+                     required=True
+                 ),
+
              ])
-async def daily_reminder(ctx, time_of_day, message):
+async def daily_reminder(ctx, message, time_of_day):
     # init data
     try:
         user_id, id_, doc, user_tz, dm = basic_init(ctx)
@@ -260,11 +263,7 @@ async def daily_reminder(ctx, time_of_day, message):
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
-    time_of_day = time_of_day.lower().replace(' ', '')
-    if "am" in time_of_day or "pm" in time_of_day:
-        time = datetime.strptime(time_of_day, '%I:%M%p')
-    else:
-        time = datetime.strptime(time_of_day, '%H:%M')
+    time = strhour_to_dt(time_of_day)
 
     # initialize the class
     mainsched.add_job(send_message, 'cron', (message, doc['contact information'], dm, user_id), hour=time.hour,
@@ -331,8 +330,8 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
 
     # Format the times
     tomorrow = datetime.now(tz=user_tz) + timedelta(days=1, hours=0, minutes=0)
-    time_1 = datetime.strptime(time_1, '%H:%M')
-    time_2 = datetime.strptime(time_2, '%H:%M')
+    time_1 = strhour_to_dt(time_1)
+    time_2 = strhour_to_dt(time_2)
     today = datetime.now(tz=user_tz)
     time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
     time_2 = today.replace(hour=time_2.hour, minute=time_2.minute)
@@ -343,12 +342,14 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
         # make sure that the call for repeating starts the next day, not today, not two days from now
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
-                              args=(message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                              args=(
+                              message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
-                              args=(message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                              args=(
+                              message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
         # add the cron job to active jobs
@@ -372,7 +373,8 @@ def between_times_interval(message, contact, dm, user_id, time_1, time_2, interv
     mainsched.add_job(send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
-                      args=(message, contact, dm, user_id), misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
+                      args=(message, contact, dm, user_id), misfire_grace_time=500, replace_existing=True, id=id_,
+                      timezone=user_tz)
 
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
@@ -445,6 +447,7 @@ async def remove_schedule(ctx):
         try:
             # remove jobs from the scheduler then from 'active jobs'
             mainsched.remove_job(value, 'default')
+            # this may or may not do nothing
             db.bot_usage.update_one({'user id': user_id},
                                     {'$pull': {'active jobs': value}})
         except JobLookupError:
@@ -466,6 +469,7 @@ async def remove_schedule(ctx):
              ])
 async def remove_index(ctx, index):
     # verificaiton process
+    logging.critical("start of remove_index")
     try:
         user_id, id_, doc, user_tz, dm = basic_init(ctx)
     except TypeError:
@@ -482,12 +486,14 @@ async def remove_index(ctx, index):
 
     # mongodb doesnt support index removals, set job to null, then remove null
     mainsched.remove_job(job_id)
-    db.bot_usage.find_one_and_update({'user id': user_id},
-                                     {'$set': {f'active jobs.{index}': None}})
-    db.bot_usage.find_one_and_update({'user id': user_id},
-                                     {'$pull': {'active jobs': None}})
+    # db.bot_usage.find_one_and_update({'user id': user_id},
+    #                                  {'$set': {f'active jobs.{index}': "hello"}})
+    # logging.info(f"interim value: {db.bot_usage.find_one({'user id': user_id})[f'active jobs']}")
+    # db.bot_usage.find_one_and_update({'user id': user_id},
+    #                                  {'$pull': {'active jobs': "hello"}})
 
-    await ctx.send(content=f"⏰ Command executed, **Index**: {index} job removed")
+
+    await ctx.send(content=f"⏰ Command executed, **Index**: {index+1} job removed")
 
 
 # the listener
@@ -495,6 +501,8 @@ def jobitem_removed(event):
     """
         the listener checks for when a job is removed or executed and removes it from 'active jobs'
         """
+
+    logging.info("listener activated")
 
     user_id = int(event.job_id.split('user')[1])
     job = mainsched.get_job(event.job_id)
