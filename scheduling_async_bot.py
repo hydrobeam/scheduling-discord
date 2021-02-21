@@ -21,16 +21,15 @@ from googleapiclient.errors import HttpError
 from pprint import pprint
 
 # TODO: optional hidden
-# TODO: bdtweentwo tiems tomorow
-# TODO: change time format --> HH:MM + 10pm
+# TODO: Natural inputs?
+# TODO: fix get-sched in case of bugging
 
 # Initialization stuff
 intents = discord.Intents.default()
 intents.members = True
 client = discord.Client(intents=intents)
-slash = SlashCommand(client, auto_register=True, auto_delete=True)
+slash = SlashCommand(client, sync_commands=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
-
 
 
 # serious commands
@@ -211,7 +210,7 @@ async def time_from_now(ctx, message, duration):
 
              ]
              )
-async def define_self(ctx, contact_info, direct_message, tz='America/New_York',):
+async def define_self(ctx, contact_info, direct_message, tz='America/New_York', ):
     # dm has to be Yes/ No because choices dont support True False bools
 
     user_id = ctx.author.id
@@ -343,13 +342,13 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
                               args=(
-                              message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                                  message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
                               args=(
-                              message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                                  message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
         # add the cron job to active jobs
@@ -492,8 +491,7 @@ async def remove_index(ctx, index):
     # db.bot_usage.find_one_and_update({'user id': user_id},
     #                                  {'$pull': {'active jobs': "hello"}})
 
-
-    await ctx.send(content=f"⏰ Command executed, **Index**: {index+1} job removed")
+    await ctx.send(content=f"⏰ Command executed, **Index**: {index + 1} job removed")
 
 
 # the listener
