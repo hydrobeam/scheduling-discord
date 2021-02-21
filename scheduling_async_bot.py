@@ -73,7 +73,7 @@ def basic_init(ctx):
         return user_id, id_, doc, user_tz, dm
 
 
-@slash.slash(name="date-message", description="send a message at a specific date and time", guild_ids=guild_ids,
+@slash.slash(name="date-message", description="send a message at a specific date and time",
              options=[
                  manage_commands.create_option(
                      name="message",
@@ -143,7 +143,7 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}")
 
 
-@slash.slash(name="time-from-now", description="schedule a message for certain time from now", guild_ids=guild_ids,
+@slash.slash(name="time-from-now", description="schedule a message for certain time from now",
              options=[
                  manage_commands.create_option(
                      name="message",
@@ -179,7 +179,7 @@ async def time_from_now(ctx, message, duration):
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
 
 
-@slash.slash(name="define-self", description="Initialize your details", guild_ids=guild_ids,
+@slash.slash(name="define-self", description="Initialize your details",
              options=[
                  manage_commands.create_option(
                      name="contact_info",
@@ -238,7 +238,7 @@ async def define_self(ctx, contact_info, direct_message, tz='America/New_York', 
                    complete_hidden=True)
 
 
-@slash.slash(name="daily-reminder", description="Set a daily reminder", guild_ids=guild_ids,
+@slash.slash(name="daily-reminder", description="Set a daily reminder",
              options=[
                  manage_commands.create_option(
                      name="message",
@@ -274,7 +274,7 @@ async def daily_reminder(ctx, message, time_of_day):
 
 
 @slash.slash(name="between-two-times", description='send messages at an interval between two times throughout the day',
-             guild_ids=guild_ids,
+
              options=[
                  manage_commands.create_option(
                      name="time_1",
@@ -379,7 +379,7 @@ def between_times_interval(message, contact, dm, user_id, time_1, time_2, interv
                                      {'$push': {'active jobs': id_}})
 
 
-@slash.slash(name="get-sched", description="acquire your listed schedule", guild_ids=guild_ids)
+@slash.slash(name="get-schedule", description="acquire your listed schedule")
 async def get_schedule(ctx):
     # the verification process
     try:
@@ -431,7 +431,7 @@ async def get_schedule(ctx):
     await ctx.send(content=str_out)
 
 
-@slash.slash(name="remove-schedule", description="remove all listed jobs", guild_ids=guild_ids)
+@slash.slash(name="remove-schedule", description="remove all listed jobs", )
 async def remove_schedule(ctx):
     # verification process
     try:
@@ -457,7 +457,7 @@ async def remove_schedule(ctx):
     await ctx.send(content="⏰ Command executed, listed jobs removed")
 
 
-@slash.slash(name="remove-index", description="remove a single job according to its position", guild_ids=guild_ids,
+@slash.slash(name="remove-index", description="remove a single job according to its position",
              options=[
                  manage_commands.create_option(
                      name="index-position",
