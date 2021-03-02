@@ -9,7 +9,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
 from pymongo import MongoClient
 
 from datetime import timedelta, datetime
-from pytz import timezone
+from pytz import timezone, UnknownTimeZoneError
 from uuid import uuid4
 
 import configparser, logging
@@ -17,8 +17,6 @@ import configparser, logging
 from utility_file import format_dt, short_dt, strhour_to_dt
 import ezgmail
 from googleapiclient.errors import HttpError
-
-from pprint import pprint
 
 # TODO: optional hidden
 # TODO: Natural inputs?
@@ -32,24 +30,26 @@ slash = SlashCommand(client, sync_commands=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
 
-# serious commands
-
-async def send_message(msg, contact, discord, user_id):
+# prep commands
+async def send_message(msg, contact, user_id):
     """
-    sends a message
+    sends a message, called by the scheduler
     """
     try:
         ezgmail.send(contact, subject='', body=msg)
     except HttpError:
         # the email provided is invalid
         logging.exception("Exception on email delivery")
-    if discord:
+
+    doc = db.user_data.find_one({"user id": user_id})
+    dm = doc['direct_message']
+    if dm:
         await send_discord_message(msg, user_id)
 
 
 async def send_discord_message(msg, user_id):
     """
-    sends a discord dm
+    sends a discord dm, called by send_message if DMs are enabled
     """
     user_obj = client.get_user(user_id)
     await user_obj.send(content=msg)
@@ -65,13 +65,78 @@ def basic_init(ctx):
     doc = db.user_data.find_one({"user id": user_id})
     # user timezone
     user_tz = timezone(doc['timezone'])
-    # dm preference
-    dm = doc['direct_message']
     if doc is None:
         return
     else:
-        return user_id, id_, doc, user_tz, dm
+        return user_id, id_, doc, user_tz
 
+@slash.slash(name="define-self", description="Initialize your details",
+             options=[
+                 manage_commands.create_option(
+                     name="contact_info",
+                     description="Your phone number's email address: your carrier's SMS Gateway",
+                     option_type=3,
+                     required=True
+                 ),
+                 manage_commands.create_option(
+                     name="direct-message",
+                     description="also schedule messages for discord DMs?",
+                     option_type=3,
+                     required=True,
+                     choices=[
+                         manage_commands.create_choice(
+                             name="Yes",
+                             value="Yes"
+                         ),
+                         manage_commands.create_choice(
+                             name="No",
+                             value="No"
+                         )]),
+                 manage_commands.create_option(
+                     # pytz timezone
+                     name="timezone",
+                     description="default='America/New_York' tz timezone, continent+city see https://cutt.ly/discord-timezone",
+                     option_type=3,
+                     required=False
+                 ),
+
+             ]
+             )
+async def define_self(ctx, contact_info, direct_message, tz='America/New_York', ):
+    # dm has to be Yes/ No because choices dont support True False bools
+
+    user_id = ctx.author.id
+
+    # check if the timezone value provided is valid
+    try:
+        timezone(tz)
+    except UnknownTimeZoneError:
+        await ctx.send(content=f"*{tz}* is not a tz timezone, please pick a valid neighbour")
+        return
+
+    # can't use bools as options
+    if direct_message == "No":
+        direct_message = False
+    elif direct_message == "Yes":
+        direct_message = True
+
+    # Create the entry in the database for the user's preferences
+    db.user_data.find_one_and_update({"user id": user_id},
+                                     {"$set": {"contact information": contact_info, "timezone": tz,
+                                               "direct_message": direct_message}},
+                                     upsert=True)
+
+    # Entry for active jobs, where active jobs will be stored and processed
+    db.bot_usage.find_one_and_update(
+        {'user id': user_id},
+        {"$setOnInsert": {'active jobs': []}},
+        upsert=True
+    )
+    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",
+                   complete_hidden=True)
+
+
+# Actual scheduling commands
 
 @slash.slash(name="date-message", description="send a message at a specific date and time",
              options=[
@@ -109,18 +174,20 @@ def basic_init(ctx):
 async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_year=None,
                        year=None):
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
-    if day_of_month is None:
-        day_of_month = datetime.now(user_tz).day
-    if month_of_year is None:
-        month_of_year = datetime.now(user_tz).month
-    if year is None:
-        year = datetime.now(user_tz).year
 
-    # check if am or pm are used, set lower and remove spaces: 9:08 pm == 9:08pm
+    present_time = datetime.now(user_tz)
+    if day_of_month is None:
+        day_of_month = present_time.day
+    if month_of_year is None:
+        month_of_year = present_time.month
+    if year is None:
+        year = present_time.year
+
+    # gets datetime object representing hour and minute from user string input
     time = strhour_to_dt(time_of_day)
 
     # define the time of delivery,
@@ -134,7 +201,7 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
         return
 
     mainsched.add_job(send_message, 'date', run_date=planned_time,
-                      args=(message, doc['contact information'], dm, user_id), id=id_, timezone=user_tz)
+                      args=(message, doc['contact information'], user_id), id=id_, timezone=user_tz)
 
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
@@ -160,7 +227,7 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
              ])
 async def time_from_now(ctx, message, duration):
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
@@ -168,7 +235,7 @@ async def time_from_now(ctx, message, duration):
     planned_time = datetime.now(tz=user_tz) + timedelta(minutes=duration)
 
     mainsched.add_job(send_message, 'date', run_date=planned_time,
-                      args=(message, doc['contact information'], dm, user_id),
+                      args=(message, doc['contact information'], user_id),
                       misfire_grace_time=500, replace_existing=True, id=id_,
                       timezone=user_tz)
 
@@ -177,65 +244,6 @@ async def time_from_now(ctx, message, duration):
                                      {'$push': {'active jobs': id_}})
 
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
-
-
-@slash.slash(name="define-self", description="Initialize your details",
-             options=[
-                 manage_commands.create_option(
-                     name="contact_info",
-                     description="Your phone number's email address: {your carrier} SMS Gateway",
-                     option_type=3,
-                     required=True
-                 ),
-                 manage_commands.create_option(
-                     name="direct-message",
-                     description="also schedule messages for discord DMs?",
-                     option_type=3,
-                     required=True,
-                     choices=[
-                         manage_commands.create_choice(
-                             name="Yes",
-                             value="Yes"
-                         ),
-                         manage_commands.create_choice(
-                             name="No",
-                             value="No"
-                         )]),
-                 manage_commands.create_option(
-                     name="timezone",
-                     description="default='America/New_York' tz timezone, continent+city see https://cutt.ly/discord-timezone",
-                     option_type=3,
-                     required=False
-                 ),
-
-             ]
-             )
-async def define_self(ctx, contact_info, direct_message, tz='America/New_York', ):
-    # dm has to be Yes/ No because choices dont support True False bools
-
-    user_id = ctx.author.id
-    # check if the timezone value provided is valid
-    with open('timezones.txt', 'r') as file:
-        moxy = file.read().splitlines()
-        if tz not in moxy:
-            await ctx.send(content=f"*{tz}* is not a tz timezone, please pick a valid neighbour")
-            return
-    if direct_message == "No":
-        direct_message = False
-    elif direct_message == "Yes":
-        direct_message = True
-
-    db.user_data.find_one_and_update({"user id": user_id},
-                                     {"$set": {"contact information": contact_info, "timezone": tz,
-                                               "direct_message": direct_message}},
-                                     upsert=True)
-    db.bot_usage.find_one_and_update(
-        {'user id': user_id},
-        {"$setOnInsert": {'active jobs': []}},
-        upsert=True
-    )
-    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",
-                   complete_hidden=True)
 
 
 @slash.slash(name="daily-reminder", description="Set a daily reminder",
@@ -252,20 +260,19 @@ async def define_self(ctx, contact_info, direct_message, tz='America/New_York', 
                      option_type=3,
                      required=True
                  ),
-
              ])
 async def daily_reminder(ctx, message, time_of_day):
     # init data
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     time = strhour_to_dt(time_of_day)
 
-    # initialize the class
-    mainsched.add_job(send_message, 'cron', (message, doc['contact information'], dm, user_id), hour=time.hour,
+    # create the cron job
+    mainsched.add_job(send_message, 'cron', (message, doc['contact information'], user_id), hour=time.hour,
                       minute=time.minute, misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
@@ -319,7 +326,7 @@ async def daily_reminder(ctx, message, time_of_day):
              ])
 async def between_times(ctx, time_1, time_2, interval, message, repeating="false"):
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
@@ -335,20 +342,22 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
     time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
     time_2 = today.replace(hour=time_2.hour, minute=time_2.minute)
 
-    between_times_interval(message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz)
+    # create the interval job for today
+    between_times_interval(message, doc['contact information'], user_id, time_1, time_2, interval, user_tz)
 
     if repeating == 'True':
-        # make sure that the call for repeating starts the next day, not today, not two days from now
+        # TODO: make sure that the call for repeating starts the next day, not today, not two days from now
+        # if current time is after the start date, activate the cron now, else activate it tomorrow
         if today > time_1:
             mainsched.add_job(between_times_interval, 'cron', hour=time_1.hour, minute=time_1.minute,
                               args=(
-                                  message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                                  message, doc['contact information'], user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
         elif today < time_1:
             mainsched.add_job(between_times_interval, 'cron', start_date=tomorrow, hour=time_1.hour,
                               minute=time_1.minute,
                               args=(
-                                  message, doc['contact information'], dm, user_id, time_1, time_2, interval, user_tz),
+                                  message, doc['contact information'], user_id, time_1, time_2, interval, user_tz),
                               misfire_grace_time=500, replace_existing=True, id=id_, timezone=user_tz)
 
         # add the cron job to active jobs
@@ -361,7 +370,7 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
 
 
 # error comes up when the function is placed in the above function, so it's here /shrug
-def between_times_interval(message, contact, dm, user_id, time_1, time_2, interval, user_tz):
+def between_times_interval(message, contact, user_id, time_1, time_2, interval, user_tz):
     id_ = uuid4().hex + "user" + str(user_id)
     today = datetime.now(tz=user_tz)
     time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
@@ -372,7 +381,7 @@ def between_times_interval(message, contact, dm, user_id, time_1, time_2, interv
     mainsched.add_job(send_message, 'interval', minutes=interval,
                       start_date=time_1,
                       end_date=time_2,
-                      args=(message, contact, dm, user_id), misfire_grace_time=500, replace_existing=True, id=id_,
+                      args=(message, contact, user_id), misfire_grace_time=500, replace_existing=True, id=id_,
                       timezone=user_tz)
 
     db.bot_usage.find_one_and_update({'user id': user_id},
@@ -383,7 +392,7 @@ def between_times_interval(message, contact, dm, user_id, time_1, time_2, interv
 async def get_schedule(ctx):
     # the verification process
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
@@ -399,12 +408,11 @@ async def get_schedule(ctx):
 
             # get the job and extract data from  it
             job = mainsched.get_job(value)
-            # message is always the second arg
             jobtime = job.next_run_time
             # details about the trigger
             trig = job.trigger
 
-            # get jobtype
+            # get jobtype, cron, interval, etc...
             jobtrig = f" {str(trig).split('[')[0]}"
 
             #  getting vars from trigger game
@@ -419,6 +427,8 @@ async def get_schedule(ctx):
                 pass
 
             next_run_time = format_dt(jobtime)
+            # message is always the first arg
+
             str_out += f"*Job: {job_count}* \n" \
                        f"**Next run time**: {next_run_time} \n" \
                        f"**Message**: {job.args[0]} \n" \
@@ -431,28 +441,26 @@ async def get_schedule(ctx):
     await ctx.send(content=str_out)
 
 
-@slash.slash(name="remove-schedule", description="remove all listed jobs", )
+@slash.slash(name="clear-schedule", description="clears  all listed jobs", )
 async def remove_schedule(ctx):
     # verification process
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
 
     # find the user
     user_object = db.bot_usage.find_one({'user id': user_id})
-    for value in user_object['active jobs']:
+    for job in user_object['active jobs']:
         try:
             # remove jobs from the scheduler then from 'active jobs'
-            mainsched.remove_job(value, 'default')
-            # this may or may not do nothing
-            db.bot_usage.update_one({'user id': user_id},
-                                    {'$pull': {'active jobs': value}})
+            mainsched.remove_job(job, 'default')
+
         except JobLookupError:
             # if job doesnt exist, just remove the entry from active jobs
             db.bot_usage.update_one({'user id': user_id},
-                                    {'$pull': {'active jobs': value}})
+                                    {'$pull': {'active jobs': job}})
 
     await ctx.send(content="⏰ Command executed, listed jobs removed")
 
@@ -461,7 +469,7 @@ async def remove_schedule(ctx):
              options=[
                  manage_commands.create_option(
                      name="index-position",
-                     description="do get-sched to find the job's position",
+                     description="use get-sched to find the job's position",
                      option_type=4,
                      required=True
                  )
@@ -470,7 +478,7 @@ async def remove_index(ctx, index):
     # verificaiton process
     logging.critical("start of remove_index")
     try:
-        user_id, id_, doc, user_tz, dm = basic_init(ctx)
+        user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
         await ctx.send(content=f"Please register your information with 'define-self'")
         return
@@ -483,33 +491,27 @@ async def remove_index(ctx, index):
         await ctx.send(content=f"**Index not found**")
         return
 
-    # mongodb doesnt support index removals, set job to null, then remove null
     mainsched.remove_job(job_id)
-    # db.bot_usage.find_one_and_update({'user id': user_id},
-    #                                  {'$set': {f'active jobs.{index}': "hello"}})
-    # logging.info(f"interim value: {db.bot_usage.find_one({'user id': user_id})[f'active jobs']}")
-    # db.bot_usage.find_one_and_update({'user id': user_id},
-    #                                  {'$pull': {'active jobs': "hello"}})
 
     await ctx.send(content=f"⏰ Command executed, **Index**: {index + 1} job removed")
 
 
-# the listener
+# the listener, listens for a job being removed, or a job being executed
 def jobitem_removed(event):
     """
         the listener checks for when a job is removed or executed and removes it from 'active jobs'
         """
 
-    logging.info("listener activated")
+    logging.warning("listener activated")
 
     user_id = int(event.job_id.split('user')[1])
     job = mainsched.get_job(event.job_id)
     try:
-        tz = job.trigger.timezone
+        time_z = job.trigger.timezone
     except AttributeError:
-        # doesn't matter what the timezone is, just needs to be valid. date_jobs always get removed
-        tz = "America/New_York"
-    current_time = datetime.now(tz=timezone(tz))
+        #    doesn't matter what the timezone is, just needs to be valid. date_jobs always get removed
+        time_z = timezone("America/New_York")
+    current_time = datetime.now(tz=time_z)
 
     try:
         # if end_date exists, check if end_date has already passed, then remove the job if True. if no end_date,

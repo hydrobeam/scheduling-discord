@@ -18,6 +18,12 @@ def short_dt(dtobject):
     return formatted
 
 def strhour_to_dt(time_of_day):
+    """
+    turns a string under several time formats into a datetime object:
+    7:09pm
+    7pm
+    23:01
+    """
     time_of_day = time_of_day.lower().replace(' ', '')
     if "am" in time_of_day or "pm" in time_of_day:
         if ":" in time_of_day:
