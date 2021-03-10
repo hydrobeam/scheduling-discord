@@ -18,6 +18,7 @@ from utility_file import format_dt, short_dt, strhour_to_dt
 import ezgmail
 from googleapiclient.errors import HttpError
 
+#coloredlogs.install()
 # TODO: optional hidden
 # TODO: Natural inputs?
 # TODO: fix get-sched in case of bugging
@@ -99,7 +100,6 @@ def basic_init(ctx):
                      option_type=3,
                      required=False
                  ),
-
              ]
              )
 async def define_self(ctx, contact_info, direct_message, tz='America/New_York', ):
@@ -132,8 +132,7 @@ async def define_self(ctx, contact_info, direct_message, tz='America/New_York', 
         {"$setOnInsert": {'active jobs': []}},
         upsert=True
     )
-    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",
-                   complete_hidden=True)
+    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",hidden=True)
 
 
 # Actual scheduling commands
