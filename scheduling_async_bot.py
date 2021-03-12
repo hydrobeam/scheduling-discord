@@ -19,6 +19,7 @@ import ezgmail
 from googleapiclient.errors import HttpError
 
 #coloredlogs.install()
+# TODO: send market updates?
 # TODO: snooze?
 # TODO: optional hidden
 # TODO: Natural inputs?
@@ -133,7 +134,7 @@ async def define_self(ctx, contact_info, direct_message, tz='America/New_York', 
         {"$setOnInsert": {'active jobs': []}},
         upsert=True
     )
-    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",hidden=True)
+    await ctx.send(content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}")
 
 
 # Actual scheduling commands
@@ -206,8 +207,8 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
-
-    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}", hidden=True)
+    await ctx.respond(eat=True)
+    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}")
 
 
 @slash.slash(name="time-from-now", description="schedule a message for certain time from now",
@@ -242,8 +243,8 @@ async def time_from_now(ctx, message, duration):
     # add to  active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
-
-    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ", hidden=True)
+    await ctx.respond(eat=True)
+    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*")
 
 
 @slash.slash(name="daily-reminder", description="Set a daily reminder",
@@ -364,6 +365,8 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
         db.bot_usage.find_one_and_update({'user id': user_id},
                                          {'$push': {'active jobs': id_}})
 
+
+    await ctx.respond(eat=True)
     await ctx.send(
         content=f"⏰ Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** "
                 f"\nRepeating: {repeating}")
