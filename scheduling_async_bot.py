@@ -19,7 +19,10 @@ import ezgmail
 from googleapiclient.errors import HttpError
 
 #coloredlogs.install()
+<<<<<<< HEAD
 # TODO: snooze?
+=======
+>>>>>>> 7bc47bac20ebe623b6d3de13f80ef3cfb1ade56a
 # TODO: optional hidden
 # TODO: Natural inputs?
 # TODO: fix get-sched in case of bugging
@@ -243,7 +246,11 @@ async def time_from_now(ctx, message, duration):
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
 
+<<<<<<< HEAD
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ", hidden=True)
+=======
+    await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*  ")
+>>>>>>> 7bc47bac20ebe623b6d3de13f80ef3cfb1ade56a
 
 
 @slash.slash(name="daily-reminder", description="Set a daily reminder",
