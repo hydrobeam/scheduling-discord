@@ -19,6 +19,7 @@ import ezgmail
 from googleapiclient.errors import HttpError
 
 #coloredlogs.install()
+# TODO: hide job
 # TODO: send market updates?
 # TODO: snooze?
 # TODO: optional hidden
@@ -207,7 +208,6 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
     # add to active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
-    await ctx.respond(eat=True)
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}")
 
 
@@ -220,7 +220,7 @@ async def date_message(ctx, message, time_of_day, day_of_month=None, month_of_ye
                      required=True
                  ),
                  manage_commands.create_option(
-                     name="time",
+                     name="duration",
                      description="time from current time in minutes",
                      option_type=4,
                      required=True
@@ -243,7 +243,6 @@ async def time_from_now(ctx, message, duration):
     # add to  active jobs
     db.bot_usage.find_one_and_update({'user id': user_id},
                                      {'$push': {'active jobs': id_}})
-    await ctx.respond(eat=True)
     await ctx.send(content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*")
 
 
@@ -281,8 +280,37 @@ async def daily_reminder(ctx, message, time_of_day):
     await ctx.send(content=f"⏰ Message: **{message}** - to be sent at *{short_dt(time)}*")
 
 
-@slash.slash(name="between-two-times", description='send messages at an interval between two times throughout the day',
+@slash.slash(name="register", description="register for a tutor",guild_ids = [738883135588139099], options=[
+    manage_commands.create_option(
+        name="name",
+        description="the name would you like to use with the tutor",
+        option_type=3,
+        required=True
+    )
+])
+async def register(ctx, name):
+    await ctx.send("You have been registered for a tutor!")
 
+
+@slash.slash(name="schedule-lesson", description="schedule the lesson at a given time", guild_ids= [738883135588139099], options=[
+    manage_commands.create_option(
+        name="lesson_title",
+        description="the title of the lesson",
+        option_type=3,
+        required=True
+    ),
+    manage_commands.create_option(
+        name="time",
+        description="scheduled time of the lesson",
+        option_type=3,
+        required=False
+    )
+])
+async def schedule_lesson(ctx, lesson_title, time=None):
+    await ctx.send(lesson_title)
+
+
+@slash.slash(name="between-two-times", description='send messages at an interval between two times throughout the day',
              options=[
                  manage_commands.create_option(
                      name="time_1",
@@ -366,7 +394,6 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
                                          {'$push': {'active jobs': id_}})
 
 
-    await ctx.respond(eat=True)
     await ctx.send(
         content=f"⏰ Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** "
                 f"\nRepeating: {repeating}")
@@ -393,6 +420,7 @@ def between_times_interval(message, contact, user_id, time_1, time_2, interval, 
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule")
 async def get_schedule(ctx):
+    ctx.defer()
     # the verification process
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)

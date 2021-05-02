@@ -1,5 +1,5 @@
 discord
-discord-py-slash-command==1.0.9.4
+discord-py-slash-command==1.1.2
 apscheduler
 ezgmail
 pymongo
