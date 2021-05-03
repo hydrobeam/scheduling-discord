@@ -557,7 +557,7 @@ async def get_schedule(ctx):
     else:
         str_out = "No jobs found"
 
-    await ctx.send(content=str_out, delete_after=long_delete_time)
+    await ctx.send(content=str_out)
 
 
 @slash.slash(
