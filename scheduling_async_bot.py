@@ -382,6 +382,10 @@ async def weekly_message(ctx, message, day_of_week):
         {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
 
+    await ctx.send(
+        content=f"⏰ Message: **{message}** - to be sent at *{day_of_week}* weekly",
+    )
+
 
 @slash.slash(
     name="between-two-times",
