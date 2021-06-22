@@ -123,7 +123,6 @@ async def define_self(
     except UnknownTimeZoneError:
         await ctx.send(
             content=f"*{tz}* is not a tz timezone, please pick a valid neighbour",
-            delete_after=short_delete_time,
         )
         return
 
@@ -152,7 +151,6 @@ async def define_self(
     )
     await ctx.send(
         content=f"**Information registered**: {contact_info}, **Timezone**: {tz}, **DM**: {direct_message}",
-        delete_after=long_delete_time,
     )
 
 
@@ -203,7 +201,6 @@ async def date_message(
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -228,7 +225,6 @@ async def date_message(
         await ctx.send(
             content=f"Chosen time: **{format_dt(planned_time)}** is earlier than current time: **{format_dt(x)}"
             f"**. Please choose a valid date",
-            delete_after=short_delete_time,
         )
         return
 
@@ -247,7 +243,6 @@ async def date_message(
     )
     await ctx.send(
         content=f"⏰ Message: **{message}** - scheduled for {format_dt(planned_time)}",
-        delete_after=long_delete_time,
     )
 
 
@@ -275,7 +270,6 @@ async def time_from_now(ctx, message, duration):
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -298,7 +292,6 @@ async def time_from_now(ctx, message, duration):
     )
     await ctx.send(
         content=f"⏰ Message: **{message}** - scheduled for *{format_dt(planned_time)}*",
-        delete_after=long_delete_time,
     )
 
 
@@ -321,7 +314,6 @@ async def daily_reminder(ctx, message, time):
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -345,7 +337,49 @@ async def daily_reminder(ctx, message, time):
 
     await ctx.send(
         content=f"⏰ Message: **{message}** - to be sent at *{short_dt(time)} daily",
-        delete_after=long_delete_time,
+    )
+
+
+@slash.slash(
+    name="weekly-message",
+    description="send message at a weekly interval",
+    options=[
+        manage_commands.create_option(
+            name="message",
+            description="the message.",
+            option_type=3,
+            required=True,
+        ),
+        manage_commands.create_option(
+            name="day_of_week",
+            description="day of the week, from 1 to 7, sun - sat",
+            option_type=3,
+            required=True,
+        ),
+    ],
+)
+async def weekly_message(ctx, message, day_of_week):
+    try:
+        user_id, id_, doc, user_tz = basic_init(ctx)
+    except TypeError:
+        await ctx.send(
+            content=f"Please register your information with 'define-self'",
+        )
+        return
+
+    mainsched.add_job(
+        send_message,
+        "cron",
+        (message, doc["contact information"], user_id),
+        week=day_of_week-1,
+        misfire_grace_time=500,
+        replace_existing=True,
+        id=id_,
+        timezone=user_tz,
+    )
+
+    db.bot_usage.find_one_and_update(
+        {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
 
 
@@ -395,7 +429,6 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -468,7 +501,6 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
     await ctx.send(
         content=f"⏰ Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** "
         f"\nRepeating: {repeating}",
-        delete_after=long_delete_time,
     )
 
 
@@ -510,7 +542,6 @@ async def get_schedule(ctx):
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -571,7 +602,6 @@ async def remove_schedule(ctx):
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -613,7 +643,6 @@ async def remove_index(ctx, index):
     except TypeError:
         await ctx.send(
             content=f"Please register your information with 'define-self'",
-            delete_after=short_delete_time,
         )
         return
 
@@ -629,7 +658,6 @@ async def remove_index(ctx, index):
 
     await ctx.send(
         content=f"⏰ Command executed, **Index**: {index + 1} job removed",
-        delete_after=short_delete_time,
     )
 
 
