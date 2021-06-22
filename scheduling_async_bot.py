@@ -336,7 +336,7 @@ async def daily_reminder(ctx, message, time):
     )
 
     await ctx.send(
-        content=f"⏰ Message: **{message}** - to be sent at *{short_dt(time)} daily",
+        content=f"⏰ Message: **{message}** - to be sent at *{short_dt(time)}* daily",
     )
 
 
@@ -353,12 +353,18 @@ async def daily_reminder(ctx, message, time):
         manage_commands.create_option(
             name="day_of_week",
             description="day of the week, from 1 to 7, sun - sat",
-            option_type=3,
+            option_type=4,
             required=True,
         ),
+        manage_commands.create_option(
+            name="time",
+            description="time",
+            option_type=3,
+            required=True,
+        )
     ],
 )
-async def weekly_message(ctx, message, day_of_week):
+async def weekly_message(ctx, message, day_of_week, time):
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
     except TypeError:
@@ -367,11 +373,15 @@ async def weekly_message(ctx, message, day_of_week):
         )
         return
 
+    time = strhour_to_dt(time)
+
     mainsched.add_job(
         send_message,
-        "cron",
-        (message, doc["contact information"], user_id),
-        week=day_of_week-1,
+        trigger="cron",
+        args=(message, doc["contact information"], user_id),
+        day_of_week=day_of_week-1,
+        hour=time.hour,
+        day = time.day,
         misfire_grace_time=500,
         replace_existing=True,
         id=id_,
@@ -383,7 +393,7 @@ async def weekly_message(ctx, message, day_of_week):
     )
 
     await ctx.send(
-        content=f"⏰ Message: **{message}** - to be sent at *{day_of_week}* weekly",
+        content=f"⏰ Message: **{message}** - to be sent at {short_dt(time)} on **day of week:{day_of_week}** weekly",
     )
 
 
