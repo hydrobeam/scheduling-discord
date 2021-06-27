@@ -39,7 +39,7 @@ long_delete_time = 15
 # prep commands
 
 
-async def send_message(msg, user_id):
+async def send_message(msg:str, user_id:int):
     """
     sends a discord dm, called by send_message if DMs are enabled
     """
@@ -47,29 +47,34 @@ async def send_message(msg, user_id):
     await user_obj.send(content=msg)
 
 
-def create_info(ctx):
-    if db.user_data.find_one({"initialized": True}):
-        return
-    else:
-        db.bot_usage.find_one_and_update(
-            {"user id": ctx.author.id},
-            {"$setOnInsert": {"active jobs": []}},
-            {"$setOnInsert": {"initialized": True}},
-            upsert=True,
-        )
+def create_info(user_id:int):
+    db.user_data.find_one_and_update(
+        {"user id": user_id},
+        {
+            "$set": {
+                "timezone": "America/New_York",
+            }
+        },
+        upsert=True,
+    )
+    db.bot_usage.find_one_and_update(
+        {"user id": user_id},
+        {"$setOnInsert": {"active jobs": []}},
+        upsert=True,
+    )
 
 
 def basic_init(ctx):
     """initialization of basic values"""
-    if not db.user_data.find_one({"initialized": True}):
-        create_info(ctx)
-
     user_id = ctx.author.id
+    # access information in define_self
+    if db.user_data.find_one({"user id": user_id}) is None:
+        create_info(user_id)
+
     # generate a unique id + the user_id
     id_ = uuid4().hex + "user" + str(user_id)
-    # access information in define_self
-    doc = db.user_data.find_one({"user id": user_id})
     # user timezone
+    doc = db.user_data.find_one({"user id": user_id})
     user_tz = timezone(doc["timezone"])
     return user_id, id_, user_tz
 
@@ -89,7 +94,7 @@ def basic_init(ctx):
 )
 async def set_timezone(
     ctx,
-    tz="America/New_York",
+    tz:str="America/New_York",
 ):
     # dm has to be Yes/ No because choices dont support True False bools
     # check if the timezone value provided is valid
@@ -156,7 +161,7 @@ async def set_timezone(
     ],
 )
 async def date_message(
-    ctx, message, time_of_day, day_of_month=None, month_of_year=None, year=None
+    ctx, message:str, time_of_day:str, day_of_month:int=None, month_of_year:int=None, year:int=None
 ):
     user_id, id_, user_tz = basic_init(ctx)
 
@@ -220,7 +225,7 @@ async def date_message(
         ),
     ],
 )
-async def time_from_now(ctx, message, duration):
+async def time_from_now(ctx, message:str, duration:int):
     user_id, id_, user_tz = basic_init(ctx)
 
     planned_time = datetime.now(tz=user_tz) + timedelta(minutes=duration)
@@ -372,7 +377,7 @@ async def weekly_message(ctx, message, day_of_week, time):
         ),
     ],
 )
-async def between_times(ctx, time_1, time_2, interval, message, repeating="false"):
+async def between_times(ctx, time_1:str, time_2:str, interval:int, message:str, repeating:str="false"):
     user_id, id_, user_tz = basic_init(ctx)
 
     if interval < 20:
@@ -565,7 +570,7 @@ async def remove_schedule(ctx):
         ),
     ],
 )
-async def remove_index(ctx, index, until):
+async def remove_index(ctx, index:int, until:int = None):
     # verificaiton process
     user_id, id_, user_tz = basic_init(ctx)
 
