@@ -1,8 +1,6 @@
 # Scheduling-bot
 
-## A discord bot used to send reminders to yourself via  email
-Can also be configured to email to SMS using an SMS gateway depending on the carrier. i.e. for Bell (Canada): 4161231234@txt.bell.ca 
-[Attached is a list of SMS gateways depending on carrier](https://smsemailgateway.com/)
+## A discord bot used to send reminders to yourself via discord and slash commands!
 
 ## Explanation of triggers
 #### Date
@@ -26,4 +24,4 @@ Can also be configured to email to SMS using an SMS gateway depending on the car
 > **/get-schedule**: Get a list of scheduled tasks
 ![img](https://user-images.githubusercontent.com/70682032/106963676-f30f4780-670e-11eb-8819-9b475512dbae.png)
 
-### Scheduling-bot uses mongodb, gmail api and apscheduler to store, send and schedule messages
+### Scheduling-bot uses mongodb, and apscheduler to store, send and schedule messages
