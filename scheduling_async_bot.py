@@ -1,21 +1,18 @@
-import discord
-from discord_slash import SlashCommand
-from discord_slash.utils import manage_commands
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.mongodb import MongoDBJobStore
-from apscheduler.jobstores.base import JobLookupError
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
-from pymongo import MongoClient
-
+import logging
 from datetime import timedelta, datetime
-from pytz import timezone, UnknownTimeZoneError
 from uuid import uuid4
 
-import logging
+import discord
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_REMOVED
+from apscheduler.jobstores.base import JobLookupError
+from apscheduler.jobstores.mongodb import MongoDBJobStore
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from discord_slash import SlashCommand
+from discord_slash.utils import manage_commands
+from pymongo import MongoClient
+from pytz import timezone, UnknownTimeZoneError
 
 from utility_file import format_dt, short_dt, strhour_to_dt, strweek_to_dt
-from typing import *
 
 # coloredlogs.install()
 # TODO: hide job
@@ -40,13 +37,16 @@ long_delete_time = 15
 
 async def send_message(msg: str, user_id: int):
     """
-    sends a discord dm, called by send_message if DMs are enabled
+    sends a discord dm
     """
     user_obj = client.get_user(user_id)
     await user_obj.send(content=msg)
 
 
 def create_info(user_id: int):
+    """
+    creates an entry in the database for a user if it's their first time
+    """
     db.user_data.find_one_and_update(
         {"user id": user_id},
         {
@@ -64,7 +64,17 @@ def create_info(user_id: int):
 
 
 def basic_init(ctx):
-    """initialization of basic values"""
+    """initialization of basic values
+    Returns
+    -------
+
+    user_id : :class:`int`
+        The id of the user used to place the job in the database.
+    id_ : :class:`str`
+        The id_ for the specific job. Effectively unique so no jobs are overwritten.
+    user_tx : :class:`DstTzInfo`
+        The timezone object of the timezone.
+    """
     user_id = ctx.author.id
     # access information in define_self
     if db.user_data.find_one({"user id": user_id}) is None:
@@ -95,8 +105,16 @@ async def set_timezone(
     ctx,
     tz: str = "America/New_York",
 ):
-    # dm has to be Yes/ No because choices dont support True False bools
+
     # check if the timezone value provided is valid
+    try:
+        timezone(tz)
+    except UnknownTimeZoneError:
+        await ctx.send(
+            content=f"*{tz}* is not a tz timezone, please pick a valid neighbour",
+        )
+        return
+
     user_id, id_, user_tz = basic_init(ctx)
 
     # Create the entry in the database for the user's preferences
@@ -328,11 +346,13 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
             name="weeks_to_run",
             description="For how many weeks should the reminder run?",
             option_type=4,
-            required=False
-        )
+            required=False,
+        ),
     ],
 )
-async def weekly_message(ctx, message:str, day_of_week:str, time:str, weeks_to_run:int=None):
+async def weekly_message(
+    ctx, message: str, day_of_week: str, time: str, weeks_to_run: int = None
+):
     user_id, id_, user_tz = basic_init(ctx)
 
     day_of_week = strweek_to_dt(day_of_week)
@@ -352,7 +372,7 @@ async def weekly_message(ctx, message:str, day_of_week:str, time:str, weeks_to_r
         misfire_grace_time=500,
         id=id_,
         timezone=user_tz,
-        end_date = end_date
+        end_date=end_date,
     )
 
     db.bot_usage.find_one_and_update(
