@@ -4,4 +4,6 @@ apscheduler
 ezgmail
 pymongo
 dnspython
+python-decouple
+
 

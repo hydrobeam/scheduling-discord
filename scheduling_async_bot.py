@@ -1,3 +1,4 @@
+
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils import manage_commands
@@ -109,8 +110,6 @@ def basic_init(ctx):
 )
 async def define_self(
     ctx,
-    contact_info,
-    direct_message,
     tz="America/New_York",
 ):
     # dm has to be Yes/ No because choices dont support True False bools
@@ -126,20 +125,13 @@ async def define_self(
         )
         return
 
-    # can't use bools as options
-    if direct_message == "No":
-        direct_message = False
-    elif direct_message == "Yes":
-        direct_message = True
 
     # Create the entry in the database for the user's preferences
     db.user_data.find_one_and_update(
         {"user id": user_id},
         {
             "$set": {
-                "contact information": contact_info,
                 "timezone": tz,
-                "direct_message": direct_message,
             }
         },
         upsert=True,
@@ -750,10 +742,11 @@ def jobitem_removed(event):
 
 if __name__ == "__main__":
     # parse the config file
-    config = configparser.ConfigParser()
-    config.read("config.ini")
     # connect to the mongodb database
-    mongoclient = MongoClient(config["MONGO"]["mongo_value"])
+
+    from decouple import config
+
+    mongoclient = MongoClient(config("MONGO"))
     db = mongoclient.discord
 
     # apscheduler setup, connecting to mongodb + initializing
@@ -764,4 +757,4 @@ if __name__ == "__main__":
     mainsched.start()
 
     mainsched.add_listener(jobitem_removed, EVENT_JOB_EXECUTED | EVENT_JOB_REMOVED)
-    client.run(config["DISCORD"]["bot_token"])
+    client.run(config("TOKEN"))
