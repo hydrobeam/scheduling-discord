@@ -38,6 +38,7 @@ long_delete_time = 15
 
 # prep commands
 
+
 async def send_message(msg, user_id):
     """
     sends a discord dm, called by send_message if DMs are enabled
@@ -87,8 +88,8 @@ def basic_init(ctx):
     ],
 )
 async def set_timezone(
-        ctx,
-        tz="America/New_York",
+    ctx,
+    tz="America/New_York",
 ):
     # dm has to be Yes/ No because choices dont support True False bools
     # check if the timezone value provided is valid
@@ -155,7 +156,7 @@ async def set_timezone(
     ],
 )
 async def date_message(
-        ctx, message, time_of_day, day_of_month=None, month_of_year=None, year=None
+    ctx, message, time_of_day, day_of_month=None, month_of_year=None, year=None
 ):
     user_id, id_, user_tz = basic_init(ctx)
 
@@ -179,7 +180,7 @@ async def date_message(
     if (x := datetime.now(user_tz)) > planned_time:
         await ctx.send(
             content=f"Chosen time: **{format_dt(planned_time)}** is earlier than current time: **{format_dt(x)}"
-                    f"**. Please choose a valid date",
+            f"**. Please choose a valid date",
         )
         return
 
@@ -386,9 +387,7 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
     time_2 = today.replace(hour=time_2.hour, minute=time_2.minute)
 
     # create the interval job for today
-    between_times_interval(
-        message, user_id, time_1, time_2, interval, user_tz
-    )
+    between_times_interval(message, user_id, time_1, time_2, interval, user_tz)
 
     if repeating == "True":
         # TODO: make sure that the call for repeating starts the next day, not today, not two days from now
@@ -438,14 +437,12 @@ async def between_times(ctx, time_1, time_2, interval, message, repeating="false
 
     await ctx.send(
         content=f"⏰ Message: {message} \nTime: from **{time_1.strftime('%H:%M')}** to **{time_2.strftime('%H:%M')}** "
-                f"\nRepeating: {repeating}",
+        f"\nRepeating: {repeating}",
     )
 
 
 # error comes up when the function is placed in the above function, so it's here /shrug
-def between_times_interval(
-        message, user_id, time_1, time_2, interval, user_tz
-):
+def between_times_interval(message, user_id, time_1, time_2, interval, user_tz):
     id_ = uuid4().hex + "user" + str(user_id)
     today = datetime.now(tz=user_tz)
     time_1 = today.replace(hour=time_1.hour, minute=time_1.minute)
