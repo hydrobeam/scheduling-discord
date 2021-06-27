@@ -33,9 +33,9 @@ client = discord.Client(intents=intents)
 slash = SlashCommand(client, sync_commands=True)
 guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
 
-
 short_delete_time = 5
 long_delete_time = 15
+
 
 # prep commands
 async def send_message(msg, contact, user_id):
@@ -361,7 +361,7 @@ async def daily_reminder(ctx, message, time):
             description="time",
             option_type=3,
             required=True,
-        )
+        ),
     ],
 )
 async def weekly_message(ctx, message, day_of_week, time):
@@ -379,9 +379,9 @@ async def weekly_message(ctx, message, day_of_week, time):
         send_message,
         trigger="cron",
         args=(message, doc["contact information"], user_id),
-        day_of_week=day_of_week-1,
+        day_of_week=day_of_week - 1,
         hour=time.hour,
-        day = time.day,
+        day=time.day,
         misfire_grace_time=500,
         replace_existing=True,
         id=id_,
@@ -549,7 +549,6 @@ def between_times_interval(
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule")
 async def get_schedule(ctx):
-    ctx.defer()
     # the verification process
     try:
         user_id, id_, doc, user_tz = basic_init(ctx)
@@ -563,11 +562,14 @@ async def get_schedule(ctx):
     temp = db.bot_usage.find_one({"user id": user_id})
 
     if temp["active jobs"]:
-        str_out = ""
+        author = ctx.author
+        pfp = author.avatar_url
+        embed = discord.Embed(title="Your schedule", color=0xA0CA9B)
+        embed.set_author(name=author.display_name, icon_url=pfp)
+
         job_count = 1
         # look through all jobs in 'active jobs'
         for value in temp["active jobs"]:
-
             # get the job and extract data from  it
             job = mainsched.get_job(value)
             jobtime = job.next_run_time
@@ -591,18 +593,17 @@ async def get_schedule(ctx):
             next_run_time = format_dt(jobtime)
             # message is always the first arg
 
-            str_out += (
-                f"*Job: {job_count}* \n"
+            str_out = (
                 f"**Next run time**: {next_run_time} \n"
                 f"**Message**: {job.args[0]} \n"
                 f"__Trigger__: {jobtrig} \n\n"
             )
-
+            embed.add_field(name=f"Job: {job_count} ", value=str_out)
             job_count += 1
     else:
-        str_out = "No jobs found"
+        embed = "No jobs found"
 
-    await ctx.send(content=str_out)
+    await ctx.send(embed=embed)
 
 
 @slash.slash(
@@ -642,14 +643,20 @@ async def remove_schedule(ctx):
     description="remove a single job according to its position",
     options=[
         manage_commands.create_option(
-            name="index-position",
+            name="index",
             description="use get-sched to find the job's position",
             option_type=4,
             required=True,
-        )
+        ),
+        manage_commands.create_option(
+            name="until",
+            description="from the index chosen, until the this one",
+            option_type=4,
+            required=False,
+        ),
     ],
 )
-async def remove_index(ctx, index):
+async def remove_index(ctx, index, until):
     # verificaiton process
     logging.critical("start of remove_index")
     try:
@@ -661,17 +668,45 @@ async def remove_index(ctx, index):
         return
 
     index -= 1
+    if until:
+        until -= 1
 
-    try:
-        job_id = db.bot_usage.find_one({"user id": user_id})[f"active jobs"][index]
-    except IndexError:
-        await ctx.send(content=f"**Index not found**", delete_after=short_delete_time)
-        return
+    if not until:
+        try:
+            job_hold = [
+                db.bot_usage.find_one({"user id": user_id})[f"active jobs"][index]
+            ]
+        except IndexError:
+            await ctx.send(
+                content=f"**Index not found**", delete_after=short_delete_time
+            )
+            return
+    else:
+        moving_index = index
+        job_hold = []
+        while moving_index < until:
+            try:
+                job_id = db.bot_usage.find_one({"user id": user_id})[f"active jobs"][
+                    moving_index
+                ]
+            except IndexError:
+                await ctx.send(
+                    content=f"**Index not found**", delete_after=short_delete_time
+                )
+                return
+            job_hold.append(job_id)
+            moving_index += 1
 
-    mainsched.remove_job(job_id)
-
+    for job_id in job_hold:
+        mainsched.remove_job(job_id)
+    
+    content = f"⏰ Command executed"
+    if until:
+        content+= f"**{len(job_hold)}** jobs removed. From **{index}** to **{until}**."
+    else:
+        content+= f" **Index**: {index} job removed."
     await ctx.send(
-        content=f"⏰ Command executed, **Index**: {index + 1} job removed",
+        content=content,
     )
 
 
