@@ -277,9 +277,9 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
 
     time = strhour_to_dt(time)
     if days_to_run:
-        end_time = time + timedelta(days=days_to_run)
+        end_date = time + timedelta(days=days_to_run)
     else:
-        end_time = None
+        end_date = None
 
     # create the cron job
     mainsched.add_job(
@@ -291,7 +291,7 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
         misfire_grace_time=500,
         id=id_,
         timezone=user_tz,
-        end_date=end_time,
+        end_date=end_date,
     )
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
@@ -314,7 +314,7 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
         ),
         manage_commands.create_option(
             name="day_of_week",
-            description="day of the week in text: Sunday or Sun",
+            description="Day of the week in text: Sunday or Sun",
             option_type=3,
             required=True,
         ),
@@ -324,14 +324,24 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
             option_type=3,
             required=True,
         ),
+        manage_commands.create_option(
+            name="weeks_to_run",
+            description="For how many weeks should the reminder run?",
+            option_type=4,
+            required=False
+        )
     ],
 )
-async def weekly_message(ctx, message, day_of_week, time):
+async def weekly_message(ctx, message:str, day_of_week:str, time:str, weeks_to_run:int=None):
     user_id, id_, user_tz = basic_init(ctx)
 
     day_of_week = strweek_to_dt(day_of_week)
     time = strhour_to_dt(time)
 
+    if weeks_to_run:
+        end_date = day_of_week + timedelta(weeks=weeks_to_run)
+    else:
+        end_date = None
     mainsched.add_job(
         send_message,
         trigger="cron",
@@ -342,6 +352,7 @@ async def weekly_message(ctx, message, day_of_week, time):
         misfire_grace_time=500,
         id=id_,
         timezone=user_tz,
+        end_date = end_date
     )
 
     db.bot_usage.find_one_and_update(
@@ -394,7 +405,7 @@ async def weekly_message(ctx, message, day_of_week, time):
     ],
 )
 async def between_times(
-    ctx, time_1: str, time_2: str, interval: int, message: str, repeating: str = "false"
+    ctx, time_1: str, time_2: str, interval: int, message: str, repeating: str = "False"
 ):
     user_id, id_, user_tz = basic_init(ctx)
 
