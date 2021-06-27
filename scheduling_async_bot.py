@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import logging
 
-from utility_file import format_dt, short_dt, strhour_to_dt
+from utility_file import format_dt, short_dt, strhour_to_dt, strweek_to_dt
 from typing import *
 
 # coloredlogs.install()
@@ -23,7 +23,6 @@ from typing import *
 # TODO: snooze?
 # TODO: optional hidden
 # TODO: Natural inputs?
-# TODO: fix get-sched in case of bugging
 
 # Initialization stuff
 intents = discord.Intents.default()
@@ -39,7 +38,7 @@ long_delete_time = 15
 # prep commands
 
 
-async def send_message(msg:str, user_id:int):
+async def send_message(msg: str, user_id: int):
     """
     sends a discord dm, called by send_message if DMs are enabled
     """
@@ -47,7 +46,7 @@ async def send_message(msg:str, user_id:int):
     await user_obj.send(content=msg)
 
 
-def create_info(user_id:int):
+def create_info(user_id: int):
     db.user_data.find_one_and_update(
         {"user id": user_id},
         {
@@ -94,7 +93,7 @@ def basic_init(ctx):
 )
 async def set_timezone(
     ctx,
-    tz:str="America/New_York",
+    tz: str = "America/New_York",
 ):
     # dm has to be Yes/ No because choices dont support True False bools
     # check if the timezone value provided is valid
@@ -161,7 +160,12 @@ async def set_timezone(
     ],
 )
 async def date_message(
-    ctx, message:str, time_of_day:str, day_of_month:int=None, month_of_year:int=None, year:int=None
+    ctx,
+    message: str,
+    time_of_day: str,
+    day_of_month: int = None,
+    month_of_year: int = None,
+    year: int = None,
 ):
     user_id, id_, user_tz = basic_init(ctx)
 
@@ -225,7 +229,7 @@ async def date_message(
         ),
     ],
 )
-async def time_from_now(ctx, message:str, duration:int):
+async def time_from_now(ctx, message: str, duration: int):
     user_id, id_, user_tz = basic_init(ctx)
 
     planned_time = datetime.now(tz=user_tz) + timedelta(minutes=duration)
@@ -259,13 +263,23 @@ async def time_from_now(ctx, message:str, duration:int):
         manage_commands.create_option(
             name="time", description="time of day", option_type=3, required=True
         ),
+        manage_commands.create_option(
+            name="days_to_run",
+            description="for how many days should the reminder run?",
+            option_type=4,
+            required=False,
+        ),
     ],
 )
-async def daily_reminder(ctx, message, time):
+async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
     # init data
     user_id, id_, user_tz = basic_init(ctx)
 
     time = strhour_to_dt(time)
+    if days_to_run:
+        end_time = time + timedelta(days=days_to_run)
+    else:
+        end_time = None
 
     # create the cron job
     mainsched.add_job(
@@ -277,6 +291,7 @@ async def daily_reminder(ctx, message, time):
         misfire_grace_time=500,
         id=id_,
         timezone=user_tz,
+        end_date=end_time,
     )
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
@@ -299,8 +314,8 @@ async def daily_reminder(ctx, message, time):
         ),
         manage_commands.create_option(
             name="day_of_week",
-            description="day of the week, from 1 to 7, sun - sat",
-            option_type=4,
+            description="day of the week in text: Sunday or Sun",
+            option_type=3,
             required=True,
         ),
         manage_commands.create_option(
@@ -314,15 +329,16 @@ async def daily_reminder(ctx, message, time):
 async def weekly_message(ctx, message, day_of_week, time):
     user_id, id_, user_tz = basic_init(ctx)
 
+    day_of_week = strweek_to_dt(day_of_week)
     time = strhour_to_dt(time)
 
     mainsched.add_job(
         send_message,
         trigger="cron",
         args=(message, user_id),
-        day_of_week=day_of_week - 1,
+        day_of_week=day_of_week.day,
         hour=time.hour,
-        day=time.day,
+        minute=time.minute,
         misfire_grace_time=500,
         id=id_,
         timezone=user_tz,
@@ -377,7 +393,9 @@ async def weekly_message(ctx, message, day_of_week, time):
         ),
     ],
 )
-async def between_times(ctx, time_1:str, time_2:str, interval:int, message:str, repeating:str="false"):
+async def between_times(
+    ctx, time_1: str, time_2: str, interval: int, message: str, repeating: str = "false"
+):
     user_id, id_, user_tz = basic_init(ctx)
 
     if interval < 20:
@@ -570,7 +588,7 @@ async def remove_schedule(ctx):
         ),
     ],
 )
-async def remove_index(ctx, index:int, until:int = None):
+async def remove_index(ctx, index: int, until: int = None):
     # verificaiton process
     user_id, id_, user_tz = basic_init(ctx)
 
