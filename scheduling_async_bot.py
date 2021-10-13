@@ -1,3 +1,4 @@
+from inspect import Attribute
 import logging
 from datetime import timedelta, datetime
 from uuid import uuid4
@@ -295,7 +296,7 @@ async def daily_reminder(ctx, message: str, time: str, days_to_run: int = None):
 
     time = strhour_to_dt(time)
     if days_to_run:
-        end_date = time + timedelta(days=days_to_run)
+        end_date = datetime.now() + timedelta(days=days_to_run)
     else:
         end_date = None
 
@@ -550,14 +551,15 @@ async def get_schedule(ctx):
 
             #  getting vars from trigger game
             try:
-                if x := short_dt(trig.start_date):
-                    jobtrig += f" | **Start time**: {x} "
-                if x := short_dt(trig.end_date):
-                    jobtrig += f"**End time**: {x}"
-                jobtrig += f" **Timezone**: {trig.timezone}"
+                jobtrig += f"\n**Start time**: {format_dt(trig.start_date)}"
             except AttributeError:
-                # this is a date job, no relevant attributes
                 pass
+
+            try:
+                jobtrig += f"\n**End time**: {format_dt(trig.end_date)}"
+            except AttributeError:
+                pass
+                # means it's a date job, no relevant attributes
 
             next_run_time = format_dt(jobtime)
             # message is always the first arg
@@ -640,7 +642,7 @@ async def remove_index(ctx, index: int, until: int = None):
     else:
         moving_index = index
         job_hold = []
-        while moving_index < until:
+        while moving_index <= until:
             try:
                 job_id = db.bot_usage.find_one({"user id": user_id})[f"active jobs"][
                     moving_index
@@ -658,9 +660,9 @@ async def remove_index(ctx, index: int, until: int = None):
 
     content = f"⏰ Command executed. "
     if until:
-        content += f"**{len(job_hold)}** jobs removed. From **{index}** to **{until}**."
+        content += f"**{len(job_hold)}** jobs removed. From **{index + 1}** to **{until + 1}**."
     else:
-        content += f" **Index**: {index} job removed."
+        content += f" **Index**: {index + 1} job removed."
     await ctx.send(
         content=content,
     )
