@@ -106,7 +106,6 @@ async def set_timezone(
     ctx,
     tz: str = "America/New_York",
 ):
-
     # check if the timezone value provided is valid
     try:
         timezone(tz)
@@ -403,7 +402,7 @@ async def weekly_message(
         ),
         manage_commands.create_option(
             name="interval",
-            description="Time between messages in minutes, minimum: 20 minutes",
+            description="Time between messages in minutes, minimum: 10 minutes",
             option_type=4,
             required=True,
         ),
@@ -430,8 +429,8 @@ async def between_times(
 ):
     user_id, id_, user_tz = basic_init(ctx)
 
-    if interval < 20:
-        interval = 20
+    if interval < 10:
+        interval = 10
 
     # Format the times
     tomorrow = datetime.now(tz=user_tz) + timedelta(days=1, hours=0, minutes=0)
@@ -562,11 +561,10 @@ async def get_schedule(ctx):
                 # means it's a date job, no relevant attributes
 
             next_run_time = format_dt(jobtime)
-            # message is always the first arg
 
             str_out = (
                 f"**Next run time**: {next_run_time} \n"
-                f"**Message**: {job.args[0]} \n"
+                f"**Message**: {job.args[0]} \n"  # message is always the first arg
                 f"__Trigger__: {jobtrig} \n\n"
             )
             embed.add_field(name=f"Job: {job_count} ", value=str_out)
@@ -579,7 +577,7 @@ async def get_schedule(ctx):
 
 @slash.slash(
     name="clear-schedule",
-    description="clears  all listed jobs",
+    description="clears all listed jobs",
 )
 async def remove_schedule(ctx):
     # verification process
@@ -615,7 +613,7 @@ async def remove_schedule(ctx):
         ),
         manage_commands.create_option(
             name="until",
-            description="from the index chosen, until the this one",
+            description="from the index chosen, until the this one (inclusive)",
             option_type=4,
             required=False,
         ),
@@ -674,6 +672,8 @@ def jobitem_removed(event):
     the listener checks for when a job is removed or executed and removes it from 'active jobs'
     """
 
+    # listener actually activates twice when a job is executed, since it's also removed🤷
+
     logging.warning("listener activated")
 
     user_id = int(event.job_id.split("user")[1])
@@ -690,7 +690,7 @@ def jobitem_removed(event):
         # or end_date not passed, execute the function
         if x := job.trigger.end_date:
             if current_time >= x:
-                # the end_date has passed, remove hte job
+                # the end_date has passed, remove the job
                 pass
             else:
                 # the end_date has note yet passed, do not remove the job

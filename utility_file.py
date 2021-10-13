@@ -45,8 +45,7 @@ def strhour_to_dt(time_of_day):
 
 def strweek_to_dt(week):
     week = week.lower().replace(" ", "")
-    length = len(week)
-    if length > 3:
+    if len(week) > 3:
         # Sunday, Monday, Tuesday
         time = datetime.strptime(week, "%A")
     else:
