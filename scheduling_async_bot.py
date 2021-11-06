@@ -1,6 +1,7 @@
 from inspect import Attribute
 import logging
 from datetime import timedelta, datetime
+from typing import Optional
 from uuid import uuid4
 
 import discord
@@ -27,7 +28,7 @@ intents = discord.Intents.default()
 intents.members = True
 client = discord.Client(intents=intents)
 slash = SlashCommand(client, sync_commands=True)
-guild_ids = [687499582459871242, 748887953497129052, 677353989632950273]
+guild_ids = [687499582459871242, 748887953497129052, 677353989632950273, 816667074353037362]
 
 short_delete_time = 5
 long_delete_time = 15
@@ -362,6 +363,7 @@ async def weekly_message(
         end_date = day_of_week + timedelta(weeks=weeks_to_run)
     else:
         end_date = None
+
     mainsched.add_job(
         send_message,
         trigger="cron",
@@ -384,43 +386,101 @@ async def weekly_message(
     )
 
 
-@slash.slash(name="m135-quiz-ping",
- description="want to get reminded about m135 quizzes?",
- options=[
-     manage_commands.create_option(
-         name="time",
-         option_type=3,
-         required=False,
-         description="At which time should the reminder go off? Default 11pm"
-     )
- ]
+@slash.slash(
+    name="cron-job",
+    description="Order a cron job with arbitrary parameters. Very extensible",
+    options=[
+        manage_commands.create_option(
+            name="message",
+            option_type=3,
+            required=True,
+            description="The message to be sent",
+        ),
+        manage_commands.create_option(
+            name="minute", description="minute: (0-59)", option_type=3, required=False
+        ),
+        manage_commands.create_option(
+            name="hour",
+            description="hour:(0-23)",
+            required=False,
+            option_type=3,
+        ),
+        manage_commands.create_option(
+            name="day_of_week",
+            description="number or name of weekday: (0-6)/mon,tue,wed...",
+            option_type=3,
+            required=False,
+        ),
+        manage_commands.create_option(
+            name="week", description="week: (1-53)", option_type=3, required=False
+        ),
+        manage_commands.create_option(
+            name="month", description="month: (1-12)", option_type=3, required=False
+        ),
+        manage_commands.create_option(
+            name="year", description="4 digit year", option_type=3, required=False
+        ),
+        manage_commands.create_option(
+            name="start_date",
+            description="earliest possible date/time to trigger on (inclusive)",
+            option_type=3,
+            required=False,
+        ),
+        manage_commands.create_option(
+            name="end_date",
+            description="latest possible time to trigger on (inclusive)",
+            option_type=3,
+            required=False,
+        ),
+    ],
 )
-async def math135(ctx, activate:str, time:str="11pm"):
+async def cron_job(
+    ctx,
+    message: str,
+    minute: Optional[str] = None,
+    hour: Optional[str] = None,
+    day_of_week: Optional[str] = None,
+    week: Optional[str] = None,
+    month: Optional[str] = None,
+    year: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
     user_id, id_, user_tz = basic_init(ctx)
 
-    time = strhour_to_dt(time)
-
-    message = """
-    Do your Math 135 Quiz!
-    https://learn.uwaterloo.ca/d2l/le/content/709942/viewContent/3894950/View
-    """
     mainsched.add_job(
         send_message,
         trigger="cron",
         args=(message, user_id),
-        day_of_week="mon,wed,fri",
-        hour=time.hour,
-        minute=time.minute,
-        misfire_grace_time=500,
+        minute=minute,
+        hour=hour,
+        day_of_week=day_of_week,
+        week=week,
+        month=month,
+        year=year,
+        start_date=start_date,
+        end_date=end_date,
         id=id_,
         timezone=user_tz,
+        misfire_grace_time=500,
     )
+
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
     
     await ctx.send(
-        content=f"⏰ Message: **{message}** - to be sent at {short_dt(time)} every mon/wed/fri!",
+        content=f"""
+        ⏰ Message: **{message}** to be sent with the following parameters:
+        **minute**: {minute},
+        **hour**: {hour},
+        **day_of_week**: {day_of_week},
+        **week**: {week},
+        **month**: {month},
+        **year**: {year},
+        **start_date**: {start_date},
+        **end_date**: {end_date}
+        """,
     )
 
 
@@ -560,10 +620,6 @@ def between_times_interval(message, user_id, time_1, time_2, interval, user_tz):
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
-
-
-
-
 
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule")
