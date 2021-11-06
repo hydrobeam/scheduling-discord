@@ -384,6 +384,46 @@ async def weekly_message(
     )
 
 
+@slash.slash(name="m135-quiz-ping",
+ description="want to get reminded about m135 quizzes?",
+ options=[
+     manage_commands.create_option(
+         name="time",
+         option_type=3,
+         required=False,
+         description="At which time should the reminder go off? Default 11pm"
+     )
+ ]
+)
+async def math135(ctx, activate:str, time:str="11pm"):
+    user_id, id_, user_tz = basic_init(ctx)
+
+    time = strhour_to_dt(time)
+
+    message = """
+    Do your Math 135 Quiz!
+    https://learn.uwaterloo.ca/d2l/le/content/709942/viewContent/3894950/View
+    """
+    mainsched.add_job(
+        send_message,
+        trigger="cron",
+        args=(message, user_id),
+        day_of_week="mon,wed,fri",
+        hour=time.hour,
+        minute=time.minute,
+        misfire_grace_time=500,
+        id=id_,
+        timezone=user_tz,
+    )
+    db.bot_usage.find_one_and_update(
+        {"user id": user_id}, {"$push": {"active jobs": id_}}
+    )
+    
+    await ctx.send(
+        content=f"⏰ Message: **{message}** - to be sent at {short_dt(time)} every mon/wed/fri!",
+    )
+
+
 @slash.slash(
     name="between-two-times",
     description="send messages at an interval between two times throughout the day",
@@ -520,6 +560,10 @@ def between_times_interval(message, user_id, time_1, time_2, interval, user_tz):
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
+
+
+
+
 
 
 @slash.slash(name="get-schedule", description="acquire your listed schedule")
