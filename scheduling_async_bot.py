@@ -28,7 +28,12 @@ intents = discord.Intents.default()
 intents.members = True
 client = discord.Client(intents=intents)
 slash = SlashCommand(client, sync_commands=True)
-guild_ids = [687499582459871242, 748887953497129052, 677353989632950273, 816667074353037362]
+guild_ids = [
+    687499582459871242,
+    748887953497129052,
+    677353989632950273,
+    816667074353037362,
+]
 
 short_delete_time = 5
 long_delete_time = 15
@@ -468,7 +473,7 @@ async def cron_job(
     db.bot_usage.find_one_and_update(
         {"user id": user_id}, {"$push": {"active jobs": id_}}
     )
-    
+
     await ctx.send(
         content=f"""
         ⏰ Message: **{message}** to be sent with the following parameters:
